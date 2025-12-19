@@ -159,16 +159,24 @@ func (p *processMessage) render(renderer *sdl.Renderer) {
 	font := internal.Fonts.SmallFont
 
 	maxWidth := p.window.GetWidth() * 3 / 4
-	internal.RenderMultilineText(renderer, p.message, font, maxWidth, p.window.GetWidth()/2, p.window.GetHeight()/2, sdl.Color{R: 255, G: 255, B: 255, A: 255})
+
+	messageY := p.window.GetHeight() / 2
+	spacing := int32(5)
+	if p.showProgressBar {
+		barHeight := int32(40)
+		totalHeight := (int32(font.Height()) * 2) + spacing + barHeight
+		messageY = (p.window.GetHeight() - totalHeight) / 2
+	}
+
+	internal.RenderMultilineText(renderer, p.message, font, maxWidth, p.window.GetWidth()/2, messageY, sdl.Color{R: 255, G: 255, B: 255, A: 255})
 
 	if p.showProgressBar {
-		p.renderProgressBar(renderer)
+		p.renderProgressBar(renderer, messageY, spacing)
 	}
 }
 
-func (p *processMessage) renderProgressBar(renderer *sdl.Renderer) {
+func (p *processMessage) renderProgressBar(renderer *sdl.Renderer, messageY, spacing int32) {
 	windowWidth := p.window.GetWidth()
-	windowHeight := p.window.GetHeight()
 
 	barWidth := windowWidth * 3 / 4
 	if barWidth > 900 {
@@ -176,7 +184,8 @@ func (p *processMessage) renderProgressBar(renderer *sdl.Renderer) {
 	}
 	barHeight := int32(40)
 	barX := (windowWidth - barWidth) / 2
-	barY := ((windowHeight - barHeight + (int32(internal.Fonts.SmallFont.Height()) * 2)) / 2) + 10
+	// Position progress bar relative to the message with consistent spacing
+	barY := messageY + int32(internal.Fonts.SmallFont.Height()) + spacing
 
 	progressBarBg := sdl.Rect{
 		X: barX,
