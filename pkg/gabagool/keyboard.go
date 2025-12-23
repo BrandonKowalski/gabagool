@@ -110,7 +110,7 @@ func createKeyboard(windowWidth, windowHeight int32) *virtualKeyboard {
 		repeatInterval:   50 * time.Millisecond,
 	}
 
-	kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines)
+	kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines, "")
 	setupKeyboardRects(kb, windowWidth, windowHeight)
 
 	return kb
@@ -685,7 +685,7 @@ func (kb *virtualKeyboard) resetPressedKeys() {
 
 func (kb *virtualKeyboard) toggleHelp() {
 	if kb.helpOverlay == nil {
-		kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines)
+		kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines, "")
 	}
 	kb.helpOverlay.toggle()
 	kb.ShowingHelp = kb.helpOverlay.ShowingHelp

@@ -29,6 +29,7 @@ type ListOptions struct {
 
 	HelpTitle string
 	HelpText  []string
+	HelpExit  string
 
 	Margins         internal.Padding
 	ItemSpacing     int32
@@ -109,7 +110,7 @@ func newListController(options ListOptions) *listController {
 
 	var helpOverlay *helpOverlay
 	if options.EnableHelp {
-		helpOverlay = newHelpOverlay(options.HelpTitle, options.HelpText)
+		helpOverlay = newHelpOverlay(options.HelpTitle, options.HelpText, options.HelpExit)
 	}
 
 	return &listController{

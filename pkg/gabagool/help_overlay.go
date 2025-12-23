@@ -9,6 +9,7 @@ import (
 
 type helpOverlay struct {
 	Title           string
+	Exit            string
 	Lines           []string
 	ShowingHelp     bool
 	ScrollOffset    int32
@@ -24,7 +25,7 @@ type helpOverlay struct {
 	ExitTextPadding int32
 }
 
-func newHelpOverlay(title string, lines []string) *helpOverlay {
+func newHelpOverlay(title string, lines []string, exit string) *helpOverlay {
 	window := internal.GetWindow()
 	width, height := window.Window.GetSize()
 
@@ -32,8 +33,13 @@ func newHelpOverlay(title string, lines []string) *helpOverlay {
 		title = "Help"
 	}
 
+	if exit == "" {
+		exit = "Press any button to close help"
+	}
+
 	return &helpOverlay{
 		Title:           title,
+		Exit:            exit,
 		Lines:           lines,
 		ScrollOffset:    0,
 		MaxScrollOffset: 0,
@@ -153,8 +159,7 @@ func (h *helpOverlay) render(renderer *sdl.Renderer, font *ttf.Font) {
 		internal.DrawSmoothScrollbar(renderer, scrollbarX, handleY, h.ScrollbarWidth, handleHeight, sdl.Color{R: 150, G: 150, B: 150, A: 255})
 	}
 
-	exitText := "Press any button to close help"
-	exitSurface, err := font.RenderUTF8Blended(exitText, h.TextColor)
+	exitSurface, err := font.RenderUTF8Blended(h.Exit, h.TextColor)
 	if err == nil && exitSurface != nil {
 		exitTexture, err := renderer.CreateTextureFromSurface(exitSurface)
 		if err == nil {
