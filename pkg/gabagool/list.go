@@ -27,8 +27,9 @@ type ListOptions struct {
 	StartInMultiSelectMode bool
 	DisableBackButton      bool
 
-	HelpTitle string
-	HelpText  []string
+	HelpTitle    string
+	HelpText     []string
+	HelpExitText string
 
 	Margins         internal.Padding
 	ItemSpacing     int32
@@ -109,7 +110,7 @@ func newListController(options ListOptions) *listController {
 
 	var helpOverlay *helpOverlay
 	if options.EnableHelp {
-		helpOverlay = newHelpOverlay(options.HelpTitle, options.HelpText)
+		helpOverlay = newHelpOverlay(options.HelpTitle, options.HelpText, options.HelpExitText)
 	}
 
 	return &listController{

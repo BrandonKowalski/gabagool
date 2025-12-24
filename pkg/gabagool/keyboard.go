@@ -45,6 +45,7 @@ type virtualKeyboard struct {
 	LastCursorBlink  time.Time
 	CursorBlinkRate  time.Duration
 	helpOverlay      *helpOverlay
+	helpExitText     string
 	ShowingHelp      bool
 	EnterPressed     bool
 	InputDelay       time.Duration
@@ -91,7 +92,7 @@ func createKeyLayout() *keyLayout {
 	}
 }
 
-func createKeyboard(windowWidth, windowHeight int32) *virtualKeyboard {
+func createKeyboard(windowWidth, windowHeight int32, helpExitText string) *virtualKeyboard {
 	kb := &virtualKeyboard{
 		Keys:             createKeys(),
 		TextBuffer:       "",
@@ -102,6 +103,7 @@ func createKeyboard(windowWidth, windowHeight int32) *virtualKeyboard {
 		CursorVisible:    true,
 		LastCursorBlink:  time.Now(),
 		CursorBlinkRate:  500 * time.Millisecond,
+		helpExitText:     helpExitText,
 		ShowingHelp:      false,
 		InputDelay:       100 * time.Millisecond,
 		lastInputTime:    time.Now(),
@@ -110,7 +112,7 @@ func createKeyboard(windowWidth, windowHeight int32) *virtualKeyboard {
 		repeatInterval:   50 * time.Millisecond,
 	}
 
-	kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines)
+	kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines, helpExitText)
 	setupKeyboardRects(kb, windowWidth, windowHeight)
 
 	return kb
@@ -271,12 +273,12 @@ type KeyboardResult struct {
 
 // Keyboard displays a virtual keyboard for text input.
 // Returns ErrCancelled if the user exits without pressing Enter.
-func Keyboard(initialText string) (*KeyboardResult, error) {
+func Keyboard(initialText string, helpExitText string) (*KeyboardResult, error) {
 	window := internal.GetWindow()
 	renderer := window.Renderer
 	font := internal.Fonts.MediumFont
 
-	kb := createKeyboard(window.GetWidth(), window.GetHeight())
+	kb := createKeyboard(window.GetWidth(), window.GetHeight(), helpExitText)
 	if initialText != "" {
 		kb.TextBuffer = initialText
 		kb.CursorPosition = len(initialText)
@@ -685,7 +687,7 @@ func (kb *virtualKeyboard) resetPressedKeys() {
 
 func (kb *virtualKeyboard) toggleHelp() {
 	if kb.helpOverlay == nil {
-		kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines)
+		kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines, kb.helpExitText)
 	}
 	kb.helpOverlay.toggle()
 	kb.ShowingHelp = kb.helpOverlay.ShowingHelp

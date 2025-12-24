@@ -43,6 +43,7 @@ type OptionListSettings struct {
 	InitialSelectedIndex int
 	DisableBackButton    bool
 	FooterHelpItems      []FooterHelpItem
+	HelpExitText         string
 }
 
 // ItemWithOptions represents a menu item with multiple choices.
@@ -83,6 +84,7 @@ type internalOptionsListSettings struct {
 	FooterHelpItems   []FooterHelpItem
 	FooterTextColor   sdl.Color
 	DisableBackButton bool
+	HelpExitText      string
 }
 
 type optionsListController struct {
@@ -213,6 +215,7 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 	optionsListController.MaxVisibleItems = int(optionsListController.calculateMaxVisibleItems(window))
 	optionsListController.Settings.FooterHelpItems = listOptions.FooterHelpItems
 	optionsListController.Settings.DisableBackButton = listOptions.DisableBackButton
+	optionsListController.Settings.HelpExitText = listOptions.HelpExitText
 
 	if listOptions.InitialSelectedIndex > 0 && listOptions.InitialSelectedIndex < len(items) {
 		if optionsListController.SelectedIndex >= 0 && optionsListController.SelectedIndex < len(items) {
@@ -524,7 +527,7 @@ func (olc *optionsListController) handleAButton(running *bool, result *OptionsLi
 			switch o.Type {
 			case OptionTypeKeyboard:
 				prompt := o.KeyboardPrompt
-				keyboardResult, err := Keyboard(prompt)
+				keyboardResult, err := Keyboard(prompt, olc.Settings.HelpExitText)
 				if err == nil {
 					enteredText := keyboardResult.Text
 					item.Options[item.SelectedOption] = Option{
@@ -685,7 +688,7 @@ func (olc *optionsListController) toggleHelp() {
 			"• A: Select or input text for keyboard options",
 			"• B: Cancel and exit",
 		}
-		olc.helpOverlay = newHelpOverlay(fmt.Sprintf("%s Help", olc.Settings.Title), helpLines)
+		olc.helpOverlay = newHelpOverlay(fmt.Sprintf("%s Help", olc.Settings.Title), helpLines, olc.Settings.HelpExitText)
 	}
 }
 
