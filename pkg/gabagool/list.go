@@ -18,11 +18,7 @@ type ListOptions struct {
 	VisibleStartIndex int
 	MaxVisibleItems   int
 
-	EnableAction      bool
-	EnableMultiSelect bool
-	EnableReordering  bool
-	EnableHelp        bool
-	EnableImages      bool
+	EnableImages bool
 
 	StartInMultiSelectMode bool
 	DisableBackButton      bool
@@ -43,9 +39,12 @@ type ListOptions struct {
 	ScrollSpeed     float32
 	ScrollPauseTime int
 
-	InputDelay        time.Duration
-	MultiSelectButton constants.VirtualButton
-	ReorderButton     constants.VirtualButton
+	InputDelay            time.Duration
+	MultiSelectButton     constants.VirtualButton
+	ReorderButton         constants.VirtualButton
+	ActionButton          constants.VirtualButton
+	SecondaryActionButton constants.VirtualButton
+	HelpButton            constants.VirtualButton
 
 	EmptyMessage      string
 	EmptyMessageColor sdl.Color
@@ -56,21 +55,24 @@ type ListOptions struct {
 
 func DefaultListOptions(title string, items []MenuItem) ListOptions {
 	return ListOptions{
-		Title:             title,
-		Items:             items,
-		SelectedIndex:     0,
-		MaxVisibleItems:   9,
-		Margins:           internal.UniformPadding(20),
-		TitleAlign:        constants.TextAlignLeft,
-		TitleSpacing:      constants.DefaultTitleSpacing,
-		FooterTextColor:   sdl.Color{R: 180, G: 180, B: 180, A: 255},
-		ScrollSpeed:       4.0,
-		ScrollPauseTime:   1250,
-		InputDelay:        constants.DefaultInputDelay,
-		MultiSelectButton: constants.VirtualButtonSelect,
-		ReorderButton:     constants.VirtualButtonSelect,
-		EmptyMessage:      "No items available",
-		EmptyMessageColor: sdl.Color{R: 255, G: 255, B: 255, A: 255},
+		Title:                 title,
+		Items:                 items,
+		SelectedIndex:         0,
+		MaxVisibleItems:       9,
+		Margins:               internal.UniformPadding(20),
+		TitleAlign:            constants.TextAlignLeft,
+		TitleSpacing:          constants.DefaultTitleSpacing,
+		FooterTextColor:       sdl.Color{R: 180, G: 180, B: 180, A: 255},
+		ScrollSpeed:           4.0,
+		ScrollPauseTime:       1250,
+		InputDelay:            constants.DefaultInputDelay,
+		MultiSelectButton:     constants.VirtualButtonUnassigned,
+		ReorderButton:         constants.VirtualButtonUnassigned,
+		ActionButton:          constants.VirtualButtonUnassigned,
+		SecondaryActionButton: constants.VirtualButtonUnassigned,
+		HelpButton:            constants.VirtualButtonUnassigned,
+		EmptyMessage:          "No items available",
+		EmptyMessageColor:     sdl.Color{R: 255, G: 255, B: 255, A: 255},
 	}
 }
 
@@ -109,7 +111,7 @@ func newListController(options ListOptions) *listController {
 	}
 
 	var helpOverlay *helpOverlay
-	if options.EnableHelp {
+	if options.HelpButton != constants.VirtualButtonUnassigned {
 		helpOverlay = newHelpOverlay(options.HelpTitle, options.HelpText, options.HelpExitText)
 	}
 
@@ -314,28 +316,44 @@ func (lc *listController) handleActionButtons(button constants.VirtualButton, ru
 		}
 	}
 
-	if button == constants.VirtualButtonX {
-		if lc.Options.EnableAction {
-			*running = false
-			result.Action = ListActionTriggered
-			if len(lc.Options.Items) > 0 {
-				if lc.MultiSelect {
-					if indices := lc.getSelectedItems(); len(indices) > 0 {
-						result.Selected = indices
-						result.VisiblePosition = indices[0] - lc.Options.VisibleStartIndex
-					}
-				} else {
-					result.Selected = []int{lc.Options.SelectedIndex}
-					result.VisiblePosition = lc.Options.SelectedIndex - lc.Options.VisibleStartIndex
+	// Primary action button handling
+	if lc.Options.ActionButton != constants.VirtualButtonUnassigned && button == lc.Options.ActionButton {
+		*running = false
+		result.Action = ListActionTriggered
+		if len(lc.Options.Items) > 0 {
+			if lc.MultiSelect {
+				if indices := lc.getSelectedItems(); len(indices) > 0 {
+					result.Selected = indices
+					result.VisiblePosition = indices[0] - lc.Options.VisibleStartIndex
 				}
+			} else {
+				result.Selected = []int{lc.Options.SelectedIndex}
+				result.VisiblePosition = lc.Options.SelectedIndex - lc.Options.VisibleStartIndex
 			}
 		}
 	}
 
-	if button == constants.VirtualButtonMenu {
-		if lc.Options.EnableHelp {
-			lc.ShowingHelp = !lc.ShowingHelp
+	// Secondary action button handling
+	if lc.Options.SecondaryActionButton != constants.VirtualButtonUnassigned &&
+		button == lc.Options.SecondaryActionButton {
+		*running = false
+		result.Action = ListActionSecondaryTriggered
+		if len(lc.Options.Items) > 0 {
+			if lc.MultiSelect {
+				if indices := lc.getSelectedItems(); len(indices) > 0 {
+					result.Selected = indices
+					result.VisiblePosition = indices[0] - lc.Options.VisibleStartIndex
+				}
+			} else {
+				result.Selected = []int{lc.Options.SelectedIndex}
+				result.VisiblePosition = lc.Options.SelectedIndex - lc.Options.VisibleStartIndex
+			}
 		}
+	}
+
+	if lc.Options.HelpButton != constants.VirtualButtonUnassigned &&
+		button == lc.Options.HelpButton {
+		lc.ShowingHelp = !lc.ShowingHelp
 	}
 
 	if button == constants.VirtualButtonStart {
@@ -349,16 +367,14 @@ func (lc *listController) handleActionButtons(button constants.VirtualButton, ru
 		}
 	}
 
-	if button == lc.Options.MultiSelectButton {
-		if lc.Options.EnableMultiSelect && len(lc.Options.Items) > 0 {
-			lc.toggleMultiSelect()
-		}
+	if lc.Options.MultiSelectButton != constants.VirtualButtonUnassigned &&
+		button == lc.Options.MultiSelectButton && len(lc.Options.Items) > 0 {
+		lc.toggleMultiSelect()
 	}
 
-	if button == lc.Options.ReorderButton {
-		if lc.Options.EnableReordering && len(lc.Options.Items) > 0 {
-			lc.ReorderMode = !lc.ReorderMode
-		}
+	if lc.Options.ReorderButton != constants.VirtualButtonUnassigned &&
+		button == lc.Options.ReorderButton && len(lc.Options.Items) > 0 {
+		lc.ReorderMode = !lc.ReorderMode
 	}
 }
 
