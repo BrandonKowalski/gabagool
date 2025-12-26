@@ -39,18 +39,21 @@ type SelectionOption struct {
 }
 
 type selectionMessageController struct {
-	message         string
-	options         []SelectionOption
-	selectedIndex   int
-	confirmButton   constants.VirtualButton
-	backButton      constants.VirtualButton
-	disableBack     bool
-	footerHelpItems []FooterHelpItem
-	inputDelay      time.Duration
-	lastInputTime   time.Time
-	confirmed       bool
-	cancelled       bool
+	message           string
+	options           []SelectionOption
+	selectedIndex     int
+	visibleStartIndex int
+	confirmButton     constants.VirtualButton
+	backButton        constants.VirtualButton
+	disableBack       bool
+	footerHelpItems   []FooterHelpItem
+	inputDelay        time.Duration
+	lastInputTime     time.Time
+	confirmed         bool
+	cancelled         bool
 }
+
+const maxVisibleOptions = 3
 
 // SelectionMessage displays a message with horizontally selectable options.
 // The user can navigate options with left/right and confirm with the confirm button.
@@ -75,7 +78,6 @@ func SelectionMessage(message string, options []SelectionOption, footerHelpItems
 		lastInputTime:   time.Now(),
 	}
 
-	// Set defaults
 	if controller.confirmButton == constants.VirtualButtonUnassigned {
 		controller.confirmButton = constants.VirtualButtonA
 	}
@@ -83,9 +85,15 @@ func SelectionMessage(message string, options []SelectionOption, footerHelpItems
 		controller.backButton = constants.VirtualButtonB
 	}
 
-	// Validate initial selection
 	if controller.selectedIndex < 0 || controller.selectedIndex >= len(options) {
 		controller.selectedIndex = 0
+	}
+
+	if len(options) >= maxVisibleOptions {
+		controller.visibleStartIndex = controller.selectedIndex - maxVisibleOptions/2
+		if controller.visibleStartIndex < 0 {
+			controller.visibleStartIndex += len(options)
+		}
 	}
 
 	for {
@@ -151,6 +159,11 @@ func (c *selectionMessageController) navigateLeft() {
 	if c.selectedIndex < 0 {
 		c.selectedIndex = len(c.options) - 1
 	}
+	// Smoothly scroll the visible window left
+	c.visibleStartIndex--
+	if c.visibleStartIndex < 0 {
+		c.visibleStartIndex = len(c.options) - 1
+	}
 }
 
 func (c *selectionMessageController) navigateRight() {
@@ -158,22 +171,21 @@ func (c *selectionMessageController) navigateRight() {
 	if c.selectedIndex >= len(c.options) {
 		c.selectedIndex = 0
 	}
+	// Smoothly scroll the visible window right
+	c.visibleStartIndex++
+	if c.visibleStartIndex >= len(c.options) {
+		c.visibleStartIndex = 0
+	}
 }
 
 func (c *selectionMessageController) render(renderer *sdl.Renderer, window *internal.Window) {
-	// Clear screen
 	renderer.SetDrawColor(0, 0, 0, 255)
 	renderer.Clear()
-
-	if window.Background != nil {
-		window.RenderBackground()
-	}
 
 	windowWidth := window.GetWidth()
 	windowHeight := window.GetHeight()
 
-	// Calculate content dimensions
-	messageFont := internal.Fonts.SmallFont
+	messageFont := internal.Fonts.LargeFont
 	optionFont := internal.Fonts.MediumFont
 
 	maxMessageWidth := int32(float64(windowWidth) * 0.75)
@@ -181,16 +193,13 @@ func (c *selectionMessageController) render(renderer *sdl.Renderer, window *inte
 		maxMessageWidth = 800
 	}
 
-	// Calculate total content height
 	messageHeight := c.calculateTextHeight(c.message, messageFont, maxMessageWidth)
 	optionHeight := int32(optionFont.Height())
 	spacing := int32(30)
 	totalHeight := messageHeight + spacing + optionHeight
 
-	// Start Y position (centered)
 	startY := (windowHeight - totalHeight) / 2
 
-	// Render message
 	centerX := windowWidth / 2
 	internal.RenderMultilineText(
 		renderer,
@@ -203,11 +212,9 @@ func (c *selectionMessageController) render(renderer *sdl.Renderer, window *inte
 		constants.TextAlignCenter,
 	)
 
-	// Render options selector
 	optionY := startY + messageHeight + spacing
 	c.renderOptions(renderer, centerX, optionY, optionFont)
 
-	// Render footer
 	renderFooter(
 		renderer,
 		internal.Fonts.SmallFont,
@@ -269,6 +276,7 @@ func (c *selectionMessageController) calculateTextHeight(text string, font *ttf.
 func (c *selectionMessageController) renderOptions(renderer *sdl.Renderer, centerX, y int32, font *ttf.Font) {
 	// Render format: < Option1 | Option2 | Option3 >
 	// Selected option is highlighted
+	// Only show up to maxVisibleOptions at a time
 
 	arrowColor := sdl.Color{R: 180, G: 180, B: 180, A: 255}
 	selectedColor := sdl.Color{R: 255, G: 255, B: 255, A: 255}
@@ -280,23 +288,36 @@ func (c *selectionMessageController) renderOptions(renderer *sdl.Renderer, cente
 	rightArrow := "  >"
 	separator := "  |  "
 
-	// Calculate total width
+	// Calculate widths
 	leftArrowWidth := c.getTextWidth(font, leftArrow)
 	rightArrowWidth := c.getTextWidth(font, rightArrow)
 	separatorWidth := c.getTextWidth(font, separator)
 
-	var optionWidths []int32
-	totalOptionsWidth := int32(0)
-	for i, opt := range c.options {
+	numOptions := len(c.options)
+	visibleCount := maxVisibleOptions
+	if visibleCount > numOptions {
+		visibleCount = numOptions
+	}
+
+	// Find the max width of any single option for even spacing
+	maxOptionWidth := int32(0)
+	for _, opt := range c.options {
 		w := c.getTextWidth(font, opt.DisplayName)
-		optionWidths = append(optionWidths, w)
-		totalOptionsWidth += w
-		if i < len(c.options)-1 {
-			totalOptionsWidth += separatorWidth
+		if w > maxOptionWidth {
+			maxOptionWidth = w
 		}
 	}
 
-	totalWidth := leftArrowWidth + totalOptionsWidth + rightArrowWidth
+	var visibleOptions []SelectionOption
+	var visibleIndices []int
+	for j := 0; j < visibleCount; j++ {
+		idx := (c.visibleStartIndex + j) % numOptions
+		visibleOptions = append(visibleOptions, c.options[idx])
+		visibleIndices = append(visibleIndices, idx)
+	}
+
+	optionsAreaWidth := int32(visibleCount)*maxOptionWidth + int32(visibleCount-1)*separatorWidth
+	totalWidth := leftArrowWidth + optionsAreaWidth + rightArrowWidth
 	startX := centerX - totalWidth/2
 
 	// Render left arrow
@@ -304,23 +325,27 @@ func (c *selectionMessageController) renderOptions(renderer *sdl.Renderer, cente
 	c.renderText(renderer, font, leftArrow, x, y, arrowColor)
 	x += leftArrowWidth
 
-	// Render options with separators
-	for i, opt := range c.options {
+	// Render visible options with separators, each in a fixed-width slot
+	for i, opt := range visibleOptions {
 		color := unselectedColor
-		if i == c.selectedIndex {
+		if visibleIndices[i] == c.selectedIndex {
 			color = selectedColor
 		}
-		c.renderText(renderer, font, opt.DisplayName, x, y, color)
-		x += optionWidths[i]
+		// Center option text within its fixed-width slot
+		optWidth := c.getTextWidth(font, opt.DisplayName)
+		slotPadding := (maxOptionWidth - optWidth) / 2
+		c.renderText(renderer, font, opt.DisplayName, x+slotPadding, y, color)
+		x += maxOptionWidth
 
-		if i < len(c.options)-1 {
+		if i < len(visibleOptions)-1 {
 			c.renderText(renderer, font, separator, x, y, separatorColor)
 			x += separatorWidth
 		}
 	}
 
-	// Render right arrow
-	c.renderText(renderer, font, rightArrow, x, y, arrowColor)
+	// Render right arrow at fixed position
+	rightArrowX := startX + leftArrowWidth + optionsAreaWidth
+	c.renderText(renderer, font, rightArrow, rightArrowX, y, arrowColor)
 }
 
 func (c *selectionMessageController) getTextWidth(font *ttf.Font, text string) int32 {
