@@ -34,6 +34,8 @@ type SelectionMessageResult struct {
 type SelectionOption struct {
 	// DisplayName is the text shown to the user
 	DisplayName string
+	// Description is optional text that replaces the main message when this option is selected
+	Description string
 	// Value is the value returned when this option is selected
 	Value interface{}
 }
@@ -193,26 +195,46 @@ func (c *selectionMessageController) render(renderer *sdl.Renderer, window *inte
 		maxMessageWidth = 800
 	}
 
-	messageHeight := c.calculateTextHeight(c.message, messageFont, maxMessageWidth)
+	// Determine display message (use description if selected option has one)
+	displayMessage := c.message
+	if desc := c.options[c.selectedIndex].Description; desc != "" {
+		displayMessage = desc
+	}
+
+	// Calculate max message height across all possible messages to prevent bouncing
+	maxMessageHeight := c.calculateTextHeight(c.message, messageFont, maxMessageWidth)
+	for _, opt := range c.options {
+		if opt.Description != "" {
+			h := c.calculateTextHeight(opt.Description, messageFont, maxMessageWidth)
+			if h > maxMessageHeight {
+				maxMessageHeight = h
+			}
+		}
+	}
+
 	optionHeight := int32(optionFont.Height())
 	spacing := int32(30)
-	totalHeight := messageHeight + spacing + optionHeight
+	totalHeight := maxMessageHeight + spacing + optionHeight
 
 	startY := (windowHeight - totalHeight) / 2
+
+	// Center the current message within the max height area
+	currentMessageHeight := c.calculateTextHeight(displayMessage, messageFont, maxMessageWidth)
+	messageY := startY + (maxMessageHeight-currentMessageHeight)/2
 
 	centerX := windowWidth / 2
 	internal.RenderMultilineText(
 		renderer,
-		c.message,
+		displayMessage,
 		messageFont,
 		maxMessageWidth,
 		centerX,
-		startY,
+		messageY,
 		sdl.Color{R: 255, G: 255, B: 255, A: 255},
 		constants.TextAlignCenter,
 	)
 
-	optionY := startY + messageHeight + spacing
+	optionY := startY + maxMessageHeight + spacing
 	c.renderOptions(renderer, centerX, optionY, optionFont)
 
 	renderFooter(
