@@ -74,11 +74,13 @@ func (iow *ItemWithOptions) Value() interface{} {
 // OptionsListResult represents the return value of the OptionsList function.
 // Items is the entire list of menu items.
 // Selected is the index of the selected item.
+// VisibleStartIndex is the index of the first visible item in the list.
 // Action is the action taken when exiting (Selected, Triggered, SecondaryTriggered, or Confirmed).
 type OptionsListResult struct {
-	Items    []ItemWithOptions
-	Selected int
-	Action   ListAction
+	Items             []ItemWithOptions
+	Selected          int
+	VisibleStartIndex int
+	Action            ListAction
 }
 type internalOptionsListSettings struct {
 	Margins               internal.Padding
@@ -236,17 +238,16 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 		optionsListController.Settings.ConfirmButton = listOptions.ConfirmButton
 	}
 
-	if listOptions.VisibleStartIndex > 0 && listOptions.VisibleStartIndex < len(items) {
-		optionsListController.VisibleStartIndex = listOptions.VisibleStartIndex
-	}
-
 	if listOptions.InitialSelectedIndex > 0 && listOptions.InitialSelectedIndex < len(items) {
 		if optionsListController.SelectedIndex >= 0 && optionsListController.SelectedIndex < len(items) {
 			optionsListController.Items[optionsListController.SelectedIndex].Item.Selected = false
 		}
 		optionsListController.SelectedIndex = listOptions.InitialSelectedIndex
 		optionsListController.Items[listOptions.InitialSelectedIndex].Item.Selected = true
-		optionsListController.scrollTo(listOptions.InitialSelectedIndex)
+	}
+
+	if listOptions.VisibleStartIndex >= 0 && listOptions.VisibleStartIndex < len(items) {
+		optionsListController.VisibleStartIndex = listOptions.VisibleStartIndex
 	}
 
 	running := true
@@ -318,6 +319,7 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 		return nil, ErrCancelled
 	}
 
+	result.VisibleStartIndex = optionsListController.VisibleStartIndex
 	return &result, nil
 }
 
