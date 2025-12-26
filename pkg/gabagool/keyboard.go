@@ -25,7 +25,37 @@ const (
 	symbolsMode
 )
 
+// KeyboardLayout specifies the type of keyboard layout to use.
+type KeyboardLayout int
+
+const (
+	// KeyboardLayoutGeneral is the default QWERTY keyboard layout.
+	KeyboardLayoutGeneral KeyboardLayout = iota
+	// KeyboardLayoutURL is optimized for entering URLs with shortcuts.
+	KeyboardLayoutURL
+	// KeyboardLayoutNumeric is a simple numpad for entering numbers.
+	KeyboardLayoutNumeric
+)
+
+// URLShortcut represents a shortcut key on the URL keyboard.
+// Value is shown normally, SymbolValue is shown when symbol mode is active.
+type URLShortcut struct {
+	Value       string
+	SymbolValue string
+}
+
+// URLKeyboardConfig holds configuration for the URL keyboard.
+type URLKeyboardConfig struct {
+	// Shortcuts to display on the URL keyboard (up to 10).
+	// 1-5 shortcuts: single row layout
+	// 6-10 shortcuts: two row layout
+	// If empty, 10 default shortcuts are used (two rows).
+	Shortcuts []URLShortcut
+}
+
 type virtualKeyboard struct {
+	Layout           KeyboardLayout
+	keyLayout        *keyLayout
 	Keys             []key
 	TextBuffer       string
 	CurrentState     keyboardState
@@ -50,6 +80,7 @@ type virtualKeyboard struct {
 	EnterPressed     bool
 	InputDelay       time.Duration
 	lastInputTime    time.Time
+	urlShortcuts     []URLShortcut
 
 	heldDirections struct {
 		up, down, left, right bool
@@ -69,6 +100,39 @@ var defaultKeyboardHelpLines = []string{
 	"• Select: Toggle Shift (uppercase/symbols)",
 	"• Y: Exit keyboard without saving",
 	"• Start: Enter (confirm input)",
+}
+
+var numericKeyboardHelpLines = []string{
+	"• D-Pad: Navigate between keys",
+	"• A: Type the selected digit",
+	"• B: Backspace",
+	"• L1 / R1: Move cursor within text",
+	"• Y: Exit keyboard without saving",
+	"• Start: Enter (confirm input)",
+}
+
+var urlKeyboardHelpLines = []string{
+	"• D-Pad: Navigate between keys",
+	"• A: Type the selected key",
+	"• B: Backspace",
+	"• X: Toggle symbols (0-9)",
+	"• L1 / R1: Move cursor within text",
+	"• Select: Toggle Shift (uppercase)",
+	"• Y: Exit keyboard without saving",
+	"• Start: Enter (confirm input)",
+}
+
+var defaultURLShortcuts = []URLShortcut{
+	{Value: "https://", SymbolValue: "http://"},
+	{Value: "www.", SymbolValue: "ftp://"},
+	{Value: ".com", SymbolValue: ".co"},
+	{Value: ".org", SymbolValue: ".tv"},
+	{Value: ".net", SymbolValue: ".me"},
+	{Value: ".io", SymbolValue: ".gg"},
+	{Value: ".dev", SymbolValue: ".uk"},
+	{Value: ".app", SymbolValue: ".de"},
+	{Value: ".edu", SymbolValue: ".ca"},
+	{Value: ".gov", SymbolValue: ".au"},
 }
 
 type keyLayout struct {
@@ -92,9 +156,9 @@ func createKeyLayout() *keyLayout {
 	}
 }
 
-func createKeyboard(windowWidth, windowHeight int32, helpExitText string) *virtualKeyboard {
+func createKeyboard(windowWidth, windowHeight int32, helpExitText string, layout KeyboardLayout) *virtualKeyboard {
 	kb := &virtualKeyboard{
-		Keys:             createKeys(),
+		Layout:           layout,
 		TextBuffer:       "",
 		CurrentState:     lowerCase,
 		SelectedKeyIndex: 0,
@@ -112,8 +176,60 @@ func createKeyboard(windowWidth, windowHeight int32, helpExitText string) *virtu
 		repeatInterval:   50 * time.Millisecond,
 	}
 
-	kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines, helpExitText)
-	setupKeyboardRects(kb, windowWidth, windowHeight)
+	// Initialize layout-specific keys and rects
+	switch layout {
+	case KeyboardLayoutURL:
+		kb.Keys = createURLKeys()
+		kb.keyLayout = createURLKeyLayout()
+		kb.helpOverlay = newHelpOverlay("URL Keyboard Help", urlKeyboardHelpLines, helpExitText)
+		setupURLKeyboardRects(kb, windowWidth, windowHeight)
+	case KeyboardLayoutNumeric:
+		kb.Keys = createNumericKeys()
+		kb.keyLayout = createNumericKeyLayout()
+		kb.helpOverlay = newHelpOverlay("Numeric Keyboard Help", numericKeyboardHelpLines, helpExitText)
+		setupNumericKeyboardRects(kb, windowWidth, windowHeight)
+	default:
+		kb.Keys = createKeys()
+		kb.keyLayout = createKeyLayout()
+		kb.helpOverlay = newHelpOverlay("Keyboard Help", defaultKeyboardHelpLines, helpExitText)
+		setupKeyboardRects(kb, windowWidth, windowHeight)
+	}
+
+	return kb
+}
+
+func createURLKeyboard(windowWidth, windowHeight int32, helpExitText string, shortcuts []URLShortcut) *virtualKeyboard {
+	kb := &virtualKeyboard{
+		Layout:           KeyboardLayoutURL,
+		TextBuffer:       "",
+		CurrentState:     lowerCase,
+		SelectedKeyIndex: 0,
+		SelectedSpecial:  0,
+		CursorPosition:   0,
+		CursorVisible:    true,
+		LastCursorBlink:  time.Now(),
+		CursorBlinkRate:  500 * time.Millisecond,
+		helpExitText:     helpExitText,
+		ShowingHelp:      false,
+		InputDelay:       100 * time.Millisecond,
+		lastInputTime:    time.Now(),
+		lastRepeatTime:   time.Now(),
+		repeatDelay:      150 * time.Millisecond,
+		repeatInterval:   50 * time.Millisecond,
+		urlShortcuts:     shortcuts,
+	}
+
+	// Use 5-row layout if 5 or fewer shortcuts, 6-row layout if more
+	if len(shortcuts) <= 5 {
+		kb.Keys = createURLKeysWithShortcuts5(shortcuts)
+		kb.keyLayout = createURLKeyLayoutFor5()
+		setupURLKeyboardRectsFor5(kb, windowWidth, windowHeight)
+	} else {
+		kb.Keys = createURLKeysWithShortcuts10(shortcuts)
+		kb.keyLayout = createURLKeyLayoutFor10()
+		setupURLKeyboardRectsFor10(kb, windowWidth, windowHeight)
+	}
+	kb.helpOverlay = newHelpOverlay("URL Keyboard Help", urlKeyboardHelpLines, helpExitText)
 
 	return kb
 }
@@ -163,6 +279,265 @@ func createKeys() []key {
 			LowerValue:  string(char),
 			UpperValue:  string(char - 32),
 			SymbolValue: zxcvSymbols[i],
+		}
+	}
+
+	return keys
+}
+
+func createURLKeyLayout() *keyLayout {
+	return &keyLayout{
+		rows: [][]interface{}{
+			// Row 1: URL shortcuts + backspace
+			{0, 1, 2, 3, 4, "backspace"},
+			// Row 2: URL special characters
+			{5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
+			// Row 3: qwertyuiop (QWERTY row)
+			{15, 16, 17, 18, 19, 20, 21, 22, 23, 24},
+			// Row 4: asdfghjkl + enter (ASDF row)
+			{25, 26, 27, 28, 29, 30, 31, 32, 33, "enter"},
+			// Row 5: shift + zxcvbnm + symbol (ZXCV row) - no space for URLs
+			{"shift", 34, 35, 36, 37, 38, 39, 40, "symbol"},
+		},
+	}
+}
+
+func createURLKeys() []key {
+	keys := make([]key, 41)
+
+	// URL shortcuts (keys 0-4)
+	shortcuts := []string{"www.", ".com", ".org", ".net", ".io"}
+	shortcutSymbols := []string{".co", ".tv", ".me", ".uk", ".gg"}
+	for i, shortcut := range shortcuts {
+		keys[i] = key{
+			LowerValue:  shortcut,
+			UpperValue:  shortcut,
+			SymbolValue: shortcutSymbols[i],
+		}
+	}
+
+	// URL special characters (keys 5-14)
+	urlChars := []string{"/", ":", "@", "-", "_", ".", "~", "?", "#", "&"}
+	urlSymbols := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
+	for i, char := range urlChars {
+		keys[5+i] = key{
+			LowerValue:  char,
+			UpperValue:  char,
+			SymbolValue: urlSymbols[i],
+		}
+	}
+
+	// QWERTY row (keys 15-24)
+	qwerty := "qwertyuiop"
+	for i, char := range qwerty {
+		keys[15+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: string(char),
+		}
+	}
+
+	// ASDF row (keys 25-33)
+	asdf := "asdfghjkl"
+	for i, char := range asdf {
+		keys[25+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: string(char),
+		}
+	}
+
+	// ZXCV row (keys 34-40)
+	zxcv := "zxcvbnm"
+	for i, char := range zxcv {
+		keys[34+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: string(char),
+		}
+	}
+
+	return keys
+}
+
+func createURLKeyLayoutFor10() *keyLayout {
+	return &keyLayout{
+		rows: [][]interface{}{
+			// Row 1: URL shortcuts (5) + backspace
+			{0, 1, 2, 3, 4, "backspace"},
+			// Row 2: URL shortcuts (5)
+			{5, 6, 7, 8, 9},
+			// Row 3: URL special characters
+			{10, 11, 12, 13, 14, 15, 16, 17, 18, 19},
+			// Row 4: qwertyuiop (QWERTY row)
+			{20, 21, 22, 23, 24, 25, 26, 27, 28, 29},
+			// Row 5: asdfghjkl + enter (ASDF row)
+			{30, 31, 32, 33, 34, 35, 36, 37, 38, "enter"},
+			// Row 6: shift + zxcvbnm + symbol (ZXCV row)
+			{"shift", 39, 40, 41, 42, 43, 44, 45, "symbol"},
+		},
+	}
+}
+
+func createURLKeyLayoutFor5() *keyLayout {
+	return &keyLayout{
+		rows: [][]interface{}{
+			// Row 1: URL shortcuts (5) + backspace
+			{0, 1, 2, 3, 4, "backspace"},
+			// Row 2: URL special characters
+			{5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
+			// Row 3: qwertyuiop (QWERTY row)
+			{15, 16, 17, 18, 19, 20, 21, 22, 23, 24},
+			// Row 4: asdfghjkl + enter (ASDF row)
+			{25, 26, 27, 28, 29, 30, 31, 32, 33, "enter"},
+			// Row 5: shift + zxcvbnm + symbol (ZXCV row)
+			{"shift", 34, 35, 36, 37, 38, 39, 40, "symbol"},
+		},
+	}
+}
+
+func createURLKeysWithShortcuts5(shortcuts []URLShortcut) []key {
+	keys := make([]key, 41)
+
+	// URL shortcuts (keys 0-4)
+	for i := 0; i < 5; i++ {
+		if i < len(shortcuts) {
+			keys[i] = key{
+				LowerValue:  shortcuts[i].Value,
+				UpperValue:  shortcuts[i].Value,
+				SymbolValue: shortcuts[i].SymbolValue,
+			}
+		}
+	}
+
+	// URL special characters (keys 5-14)
+	urlChars := []string{"/", ":", "@", "-", "_", ".", "~", "?", "#", "&"}
+	urlSymbols := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
+	for i, char := range urlChars {
+		keys[5+i] = key{
+			LowerValue:  char,
+			UpperValue:  char,
+			SymbolValue: urlSymbols[i],
+		}
+	}
+
+	// QWERTY row (keys 15-24)
+	qwerty := "qwertyuiop"
+	for i, char := range qwerty {
+		keys[15+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: string(char),
+		}
+	}
+
+	// ASDF row (keys 25-33)
+	asdf := "asdfghjkl"
+	for i, char := range asdf {
+		keys[25+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: string(char),
+		}
+	}
+
+	// ZXCV row (keys 34-40)
+	zxcv := "zxcvbnm"
+	for i, char := range zxcv {
+		keys[34+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: string(char),
+		}
+	}
+
+	return keys
+}
+
+func createURLKeysWithShortcuts10(shortcuts []URLShortcut) []key {
+	keys := make([]key, 46)
+
+	// URL shortcuts (keys 0-9)
+	for i, shortcut := range shortcuts {
+		if i >= 10 {
+			break
+		}
+		keys[i] = key{
+			LowerValue:  shortcut.Value,
+			UpperValue:  shortcut.Value,
+			SymbolValue: shortcut.SymbolValue,
+		}
+	}
+
+	// URL special characters (keys 10-19)
+	urlChars := []string{"/", ":", "@", "-", "_", ".", "~", "?", "#", "&"}
+	urlSymbols := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
+	for i, char := range urlChars {
+		keys[10+i] = key{
+			LowerValue:  char,
+			UpperValue:  char,
+			SymbolValue: urlSymbols[i],
+		}
+	}
+
+	// QWERTY row (keys 20-29)
+	qwerty := "qwertyuiop"
+	for i, char := range qwerty {
+		keys[20+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: string(char),
+		}
+	}
+
+	// ASDF row (keys 30-38)
+	asdf := "asdfghjkl"
+	for i, char := range asdf {
+		keys[30+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: string(char),
+		}
+	}
+
+	// ZXCV row (keys 39-45)
+	zxcv := "zxcvbnm"
+	for i, char := range zxcv {
+		keys[39+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: string(char),
+		}
+	}
+
+	return keys
+}
+
+func createNumericKeyLayout() *keyLayout {
+	return &keyLayout{
+		rows: [][]interface{}{
+			// Row 1: 7, 8, 9, backspace
+			{6, 7, 8, "backspace"},
+			// Row 2: 4, 5, 6, enter
+			{3, 4, 5, "enter"},
+			// Row 3: 1, 2, 3
+			{0, 1, 2},
+			// Row 4: 0 (spans full width visually)
+			{9},
+		},
+	}
+}
+
+func createNumericKeys() []key {
+	keys := make([]key, 10)
+
+	// Keys 0-9 represent digits 1-9, 0
+	digits := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}
+	for i, digit := range digits {
+		keys[i] = key{
+			LowerValue:  digit,
+			UpperValue:  digit,
+			SymbolValue: digit,
 		}
 	}
 
@@ -266,19 +641,459 @@ func setupKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
 	kb.SpaceRect = sdl.Rect{X: x, Y: y, W: spaceWidth, H: keyHeight}
 }
 
+func setupURLKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
+	keyboardWidth := (windowWidth * 85) / 100
+	keyboardHeight := (windowHeight * 85) / 100
+	textInputHeight := windowHeight / 10
+	keyboardHeight = keyboardHeight - textInputHeight - 20
+	startX := (windowWidth - keyboardWidth) / 2
+	textInputY := (windowHeight - keyboardHeight - textInputHeight - 20) / 2
+	keyboardStartY := textInputY + textInputHeight + 20
+
+	kb.KeyboardRect = sdl.Rect{X: startX, Y: keyboardStartY, W: keyboardWidth, H: keyboardHeight}
+	kb.TextInputRect = sdl.Rect{X: startX, Y: textInputY, W: keyboardWidth, H: textInputHeight}
+
+	keyWidth := keyboardWidth / 12
+	keyHeight := keyboardHeight / 6
+	keySpacing := int32(3)
+
+	// Shortcut keys are wider to fit text like "www." and ".com"
+	shortcutWidth := keyWidth * 2
+	backspaceWidth := keyWidth * 2
+	shiftWidth := keyWidth * 2
+	symbolWidth := keyWidth * 2
+	enterWidth := keyWidth + keyWidth/2
+
+	// Row widths for URL layout (QWERTY-based)
+	// Row 1: 5 shortcuts + backspace
+	row1Width := shortcutWidth*5 + keySpacing*4 + backspaceWidth + keySpacing
+	// Row 2: 10 URL special chars
+	row2Width := keyWidth*10 + keySpacing*9
+	// Row 3: 10 letters (qwertyuiop)
+	row3Width := keyWidth*10 + keySpacing*9
+	// Row 4: 9 letters (asdfghjkl) + enter
+	row4Width := keyWidth*9 + keySpacing*8 + enterWidth + keySpacing
+	// Row 5: shift + 7 letters (zxcvbnm) + symbol (no space for URLs)
+	row5Width := shiftWidth + keySpacing + keyWidth*7 + keySpacing*6 + symbolWidth + keySpacing
+
+	// Find the maximum width
+	maxRowWidth := row1Width
+	if row2Width > maxRowWidth {
+		maxRowWidth = row2Width
+	}
+	if row3Width > maxRowWidth {
+		maxRowWidth = row3Width
+	}
+	if row4Width > maxRowWidth {
+		maxRowWidth = row4Width
+	}
+	if row5Width > maxRowWidth {
+		maxRowWidth = row5Width
+	}
+
+	leftMargin := startX + (keyboardWidth-maxRowWidth)/2
+	y := keyboardStartY + keySpacing
+
+	// Row 1: URL shortcuts + Backspace
+	x := leftMargin + (maxRowWidth-row1Width)/2
+	for i := 0; i < 5; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: shortcutWidth, H: keyHeight}
+		x += shortcutWidth + keySpacing
+	}
+	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: backspaceWidth, H: keyHeight}
+
+	// Row 2: URL special characters
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row2Width)/2
+	for i := 5; i < 15; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+
+	// Row 3: QWERTY row (qwertyuiop)
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row3Width)/2
+	for i := 15; i < 25; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+
+	// Row 4: ASDF row (asdfghjkl) + Enter
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row4Width)/2
+	for i := 25; i < 34; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+	kb.EnterRect = sdl.Rect{X: x, Y: y, W: enterWidth, H: keyHeight}
+
+	// Row 5: Shift + ZXCV row (zxcvbnm) + Symbol (no space for URLs)
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row5Width)/2
+	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: shiftWidth, H: keyHeight}
+	x += shiftWidth + keySpacing
+	for i := 34; i < 41; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: symbolWidth, H: keyHeight}
+
+	// No space key for URL layout
+	kb.SpaceRect = sdl.Rect{}
+}
+
+func setupURLKeyboardRectsFor5(kb *virtualKeyboard, windowWidth, windowHeight int32) {
+	keyboardWidth := (windowWidth * 85) / 100
+	keyboardHeight := (windowHeight * 85) / 100
+	textInputHeight := windowHeight / 10
+	keyboardHeight = keyboardHeight - textInputHeight - 20
+	startX := (windowWidth - keyboardWidth) / 2
+	textInputY := (windowHeight - keyboardHeight - textInputHeight - 20) / 2
+	keyboardStartY := textInputY + textInputHeight + 20
+
+	kb.KeyboardRect = sdl.Rect{X: startX, Y: keyboardStartY, W: keyboardWidth, H: keyboardHeight}
+	kb.TextInputRect = sdl.Rect{X: startX, Y: textInputY, W: keyboardWidth, H: textInputHeight}
+
+	keyWidth := keyboardWidth / 12
+	keyHeight := keyboardHeight / 6
+	keySpacing := int32(3)
+
+	// Shortcut keys are wider to fit text like "https://" and ".com"
+	shortcutWidth := keyWidth * 2
+	backspaceWidth := keyWidth * 2
+	shiftWidth := keyWidth * 2
+	symbolWidth := keyWidth * 2
+	enterWidth := keyWidth + keyWidth/2
+
+	// Row widths for URL layout with 5 shortcuts
+	// Row 1: 5 shortcuts + backspace
+	row1Width := shortcutWidth*5 + keySpacing*4 + backspaceWidth + keySpacing
+	// Row 2: 10 URL special chars
+	row2Width := keyWidth*10 + keySpacing*9
+	// Row 3: 10 letters (qwertyuiop)
+	row3Width := keyWidth*10 + keySpacing*9
+	// Row 4: 9 letters (asdfghjkl) + enter
+	row4Width := keyWidth*9 + keySpacing*8 + enterWidth + keySpacing
+	// Row 5: shift + 7 letters (zxcvbnm) + symbol
+	row5Width := shiftWidth + keySpacing + keyWidth*7 + keySpacing*6 + symbolWidth + keySpacing
+
+	// Find the maximum width
+	maxRowWidth := row1Width
+	if row2Width > maxRowWidth {
+		maxRowWidth = row2Width
+	}
+	if row3Width > maxRowWidth {
+		maxRowWidth = row3Width
+	}
+	if row4Width > maxRowWidth {
+		maxRowWidth = row4Width
+	}
+	if row5Width > maxRowWidth {
+		maxRowWidth = row5Width
+	}
+
+	leftMargin := startX + (keyboardWidth-maxRowWidth)/2
+	y := keyboardStartY + keySpacing
+
+	// Row 1: URL shortcuts (0-4) + Backspace
+	x := leftMargin + (maxRowWidth-row1Width)/2
+	for i := 0; i < 5; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: shortcutWidth, H: keyHeight}
+		x += shortcutWidth + keySpacing
+	}
+	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: backspaceWidth, H: keyHeight}
+
+	// Row 2: URL special characters (5-14)
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row2Width)/2
+	for i := 5; i < 15; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+
+	// Row 3: QWERTY row (15-24)
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row3Width)/2
+	for i := 15; i < 25; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+
+	// Row 4: ASDF row (25-33) + Enter
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row4Width)/2
+	for i := 25; i < 34; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+	kb.EnterRect = sdl.Rect{X: x, Y: y, W: enterWidth, H: keyHeight}
+
+	// Row 5: Shift + ZXCV row (34-40) + Symbol
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row5Width)/2
+	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: shiftWidth, H: keyHeight}
+	x += shiftWidth + keySpacing
+	for i := 34; i < 41; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: symbolWidth, H: keyHeight}
+
+	// No space key for URL layout
+	kb.SpaceRect = sdl.Rect{}
+}
+
+func setupURLKeyboardRectsFor10(kb *virtualKeyboard, windowWidth, windowHeight int32) {
+	keyboardWidth := (windowWidth * 85) / 100
+	keyboardHeight := (windowHeight * 85) / 100
+	textInputHeight := windowHeight / 10
+	keyboardHeight = keyboardHeight - textInputHeight - 20
+	startX := (windowWidth - keyboardWidth) / 2
+	textInputY := (windowHeight - keyboardHeight - textInputHeight - 20) / 2
+	keyboardStartY := textInputY + textInputHeight + 20
+
+	kb.KeyboardRect = sdl.Rect{X: startX, Y: keyboardStartY, W: keyboardWidth, H: keyboardHeight}
+	kb.TextInputRect = sdl.Rect{X: startX, Y: textInputY, W: keyboardWidth, H: textInputHeight}
+
+	keyWidth := keyboardWidth / 12
+	keyHeight := keyboardHeight / 7 // 6 rows + some padding
+	keySpacing := int32(3)
+
+	// Shortcut keys are wider to fit text like "https://" and ".com"
+	shortcutWidth := keyWidth * 2
+	backspaceWidth := keyWidth * 2
+	shiftWidth := keyWidth * 2
+	symbolWidth := keyWidth * 2
+	enterWidth := keyWidth + keyWidth/2
+
+	// Row widths for URL layout with 10 shortcuts
+	// Row 1: 5 shortcuts + backspace
+	row1Width := shortcutWidth*5 + keySpacing*4 + backspaceWidth + keySpacing
+	// Row 2: 5 shortcuts (no backspace)
+	row2Width := shortcutWidth*5 + keySpacing*4
+	// Row 3: 10 URL special chars
+	row3Width := keyWidth*10 + keySpacing*9
+	// Row 4: 10 letters (qwertyuiop)
+	row4Width := keyWidth*10 + keySpacing*9
+	// Row 5: 9 letters (asdfghjkl) + enter
+	row5Width := keyWidth*9 + keySpacing*8 + enterWidth + keySpacing
+	// Row 6: shift + 7 letters (zxcvbnm) + symbol
+	row6Width := shiftWidth + keySpacing + keyWidth*7 + keySpacing*6 + symbolWidth + keySpacing
+
+	// Find the maximum width
+	maxRowWidth := row1Width
+	if row2Width > maxRowWidth {
+		maxRowWidth = row2Width
+	}
+	if row3Width > maxRowWidth {
+		maxRowWidth = row3Width
+	}
+	if row4Width > maxRowWidth {
+		maxRowWidth = row4Width
+	}
+	if row5Width > maxRowWidth {
+		maxRowWidth = row5Width
+	}
+	if row6Width > maxRowWidth {
+		maxRowWidth = row6Width
+	}
+
+	leftMargin := startX + (keyboardWidth-maxRowWidth)/2
+	y := keyboardStartY + keySpacing
+
+	// Row 1: URL shortcuts (0-4) + Backspace
+	x := leftMargin + (maxRowWidth-row1Width)/2
+	for i := 0; i < 5; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: shortcutWidth, H: keyHeight}
+		x += shortcutWidth + keySpacing
+	}
+	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: backspaceWidth, H: keyHeight}
+
+	// Row 2: URL shortcuts (5-9)
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row2Width)/2
+	for i := 5; i < 10; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: shortcutWidth, H: keyHeight}
+		x += shortcutWidth + keySpacing
+	}
+
+	// Row 3: URL special characters (10-19)
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row3Width)/2
+	for i := 10; i < 20; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+
+	// Row 4: QWERTY row (20-29)
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row4Width)/2
+	for i := 20; i < 30; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+
+	// Row 5: ASDF row (30-38) + Enter
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row5Width)/2
+	for i := 30; i < 39; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+	kb.EnterRect = sdl.Rect{X: x, Y: y, W: enterWidth, H: keyHeight}
+
+	// Row 6: Shift + ZXCV row (39-45) + Symbol
+	y += keyHeight + keySpacing
+	x = leftMargin + (maxRowWidth-row6Width)/2
+	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: shiftWidth, H: keyHeight}
+	x += shiftWidth + keySpacing
+	for i := 39; i < 46; i++ {
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
+		x += keyWidth + keySpacing
+	}
+	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: symbolWidth, H: keyHeight}
+
+	// No space key for URL layout
+	kb.SpaceRect = sdl.Rect{}
+}
+
+func setupNumericKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
+	keyboardWidth := (windowWidth * 85) / 100
+	keyboardHeight := (windowHeight * 85) / 100
+	textInputHeight := windowHeight / 10
+	keyboardHeight = keyboardHeight - textInputHeight - 20
+	startX := (windowWidth - keyboardWidth) / 2
+	textInputY := (windowHeight - keyboardHeight - textInputHeight - 20) / 2
+	keyboardStartY := textInputY + textInputHeight + 20
+
+	kb.KeyboardRect = sdl.Rect{X: startX, Y: keyboardStartY, W: keyboardWidth, H: keyboardHeight}
+	kb.TextInputRect = sdl.Rect{X: startX, Y: textInputY, W: keyboardWidth, H: textInputHeight}
+
+	// Numeric pad uses larger keys since there are fewer
+	keyWidth := keyboardWidth / 5
+	keyHeight := keyboardHeight / 5
+	keySpacing := int32(5)
+
+	backspaceWidth := keyWidth
+	enterWidth := keyWidth
+
+	// Calculate grid width (3 digit keys + 1 action key per row)
+	gridWidth := keyWidth*3 + keySpacing*2 + backspaceWidth + keySpacing
+
+	// Center the grid
+	leftMargin := startX + (keyboardWidth-gridWidth)/2
+	y := keyboardStartY + keySpacing
+
+	// Row 1: 7, 8, 9, Backspace
+	x := leftMargin
+	kb.Keys[6].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 7
+	x += keyWidth + keySpacing
+	kb.Keys[7].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 8
+	x += keyWidth + keySpacing
+	kb.Keys[8].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 9
+	x += keyWidth + keySpacing
+	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: backspaceWidth, H: keyHeight}
+
+	// Row 2: 4, 5, 6, Enter
+	y += keyHeight + keySpacing
+	x = leftMargin
+	kb.Keys[3].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 4
+	x += keyWidth + keySpacing
+	kb.Keys[4].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 5
+	x += keyWidth + keySpacing
+	kb.Keys[5].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 6
+	x += keyWidth + keySpacing
+	kb.EnterRect = sdl.Rect{X: x, Y: y, W: enterWidth, H: keyHeight}
+
+	// Row 3: 1, 2, 3
+	y += keyHeight + keySpacing
+	x = leftMargin
+	kb.Keys[0].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 1
+	x += keyWidth + keySpacing
+	kb.Keys[1].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 2
+	x += keyWidth + keySpacing
+	kb.Keys[2].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 3
+
+	// Row 4: 0 (spans width of 3 keys)
+	y += keyHeight + keySpacing
+	x = leftMargin
+	zeroWidth := keyWidth*3 + keySpacing*2
+	kb.Keys[9].Rect = sdl.Rect{X: x, Y: y, W: zeroWidth, H: keyHeight} // 0
+
+	// Initialize unused rects to zero (shift, symbol, space not used in numeric mode)
+	kb.ShiftRect = sdl.Rect{}
+	kb.SymbolRect = sdl.Rect{}
+	kb.SpaceRect = sdl.Rect{}
+}
+
 // KeyboardResult represents the result of the Keyboard component.
 type KeyboardResult struct {
 	Text string
 }
 
 // Keyboard displays a virtual keyboard for text input.
+// An optional layout parameter can be provided to use a specific keyboard layout.
+// If no layout is specified, KeyboardLayoutGeneral is used.
 // Returns ErrCancelled if the user exits without pressing Enter.
-func Keyboard(initialText string, helpExitText string) (*KeyboardResult, error) {
+func Keyboard(initialText string, helpExitText string, layout ...KeyboardLayout) (*KeyboardResult, error) {
+	selectedLayout := KeyboardLayoutGeneral
+	if len(layout) > 0 {
+		selectedLayout = layout[0]
+	}
+
 	window := internal.GetWindow()
 	renderer := window.Renderer
 	font := internal.Fonts.MediumFont
 
-	kb := createKeyboard(window.GetWidth(), window.GetHeight(), helpExitText)
+	kb := createKeyboard(window.GetWidth(), window.GetHeight(), helpExitText, selectedLayout)
+	if initialText != "" {
+		kb.TextBuffer = initialText
+		kb.CursorPosition = len(initialText)
+	}
+
+	for {
+		if kb.handleEvents() {
+			break
+		}
+
+		kb.handleDirectionalRepeats()
+
+		kb.updateCursorBlink()
+		kb.render(renderer, font)
+		sdl.Delay(16)
+	}
+
+	if kb.EnterPressed {
+		return &KeyboardResult{Text: kb.TextBuffer}, nil
+	}
+	return nil, ErrCancelled
+}
+
+// URLKeyboard displays a URL-optimized keyboard with customizable shortcuts.
+// If 1-5 shortcuts are provided, a single row of shortcuts is shown.
+// If 6-10 shortcuts are provided, two rows of shortcuts are shown.
+// If no config is provided, 10 default shortcuts are used (two rows).
+// Returns ErrCancelled if the user exits without pressing Enter.
+func URLKeyboard(initialText string, helpExitText string, config ...URLKeyboardConfig) (*KeyboardResult, error) {
+	// Build shortcuts list - use provided shortcuts or defaults
+	var shortcuts []URLShortcut
+	if len(config) > 0 && len(config[0].Shortcuts) > 0 {
+		// Use only the provided shortcuts (up to 10)
+		maxShortcuts := len(config[0].Shortcuts)
+		if maxShortcuts > 10 {
+			maxShortcuts = 10
+		}
+		shortcuts = config[0].Shortcuts[:maxShortcuts]
+	} else {
+		// No config provided, use all 10 defaults
+		shortcuts = defaultURLShortcuts
+	}
+
+	window := internal.GetWindow()
+	renderer := window.Renderer
+	font := internal.Fonts.MediumFont
+
+	kb := createURLKeyboard(window.GetWidth(), window.GetHeight(), helpExitText, shortcuts)
 	if initialText != "" {
 		kb.TextBuffer = initialText
 		kb.CursorPosition = len(initialText)
@@ -383,10 +1198,17 @@ func (kb *virtualKeyboard) handleInputEvent(inputEvent *internal.Event) bool {
 		kb.backspace()
 		return false
 	case constants.VirtualButtonX:
-		kb.insertSpace()
+		if kb.Layout == KeyboardLayoutGeneral {
+			kb.insertSpace()
+		} else if kb.Layout == KeyboardLayoutURL {
+			kb.toggleSymbols()
+		}
 		return false
 	case constants.VirtualButtonSelect:
-		kb.toggleShift()
+		// No shift in numeric layout
+		if kb.Layout != KeyboardLayoutNumeric {
+			kb.toggleShift()
+		}
 		return false
 	case constants.VirtualButtonY:
 		return true // Exit without saving
@@ -472,7 +1294,7 @@ func (kb *virtualKeyboard) handleDirectionalRepeats() {
 }
 
 func (kb *virtualKeyboard) navigate(button constants.VirtualButton) {
-	layout := createKeyLayout()
+	layout := kb.keyLayout
 	currentRow, currentCol := kb.findCurrentPosition(layout)
 
 	var newRow, newCol int
@@ -584,7 +1406,7 @@ func (kb *virtualKeyboard) getKeyValue(index int) string {
 	key := kb.Keys[index]
 	if kb.CurrentState == symbolsMode {
 		return key.SymbolValue
-	} else if index < 10 && kb.ShiftPressed {
+	} else if kb.Layout == KeyboardLayoutGeneral && index < 10 && kb.ShiftPressed {
 		return key.SymbolValue
 	} else if kb.CurrentState == upperCase {
 		return key.UpperValue
@@ -883,9 +1705,19 @@ func (kb *virtualKeyboard) renderKeyText(renderer *sdl.Renderer, font *ttf.Font,
 func (kb *virtualKeyboard) renderSpecialKeys(renderer *sdl.Renderer) {
 	kb.renderSpecialKey(renderer, kb.BackspaceRect, "←", kb.SelectedSpecial == 1)
 	kb.renderSpecialKey(renderer, kb.EnterRect, "↵", kb.SelectedSpecial == 2)
+
+	// Numeric layout only has backspace and enter
+	if kb.Layout == KeyboardLayoutNumeric {
+		return
+	}
+
 	kb.renderSpecialKey(renderer, kb.ShiftRect, "⇧", kb.SelectedSpecial == 4 || kb.CurrentState == upperCase)
 	kb.renderSpecialKey(renderer, kb.SymbolRect, "sym", kb.SelectedSpecial == 5 || kb.CurrentState == symbolsMode)
-	kb.renderSpaceKey(renderer)
+
+	// URL layout has no space key
+	if kb.Layout != KeyboardLayoutURL {
+		kb.renderSpaceKey(renderer)
+	}
 }
 
 func (kb *virtualKeyboard) renderSpecialKey(renderer *sdl.Renderer, rect sdl.Rect, symbol string, isSelected bool) {

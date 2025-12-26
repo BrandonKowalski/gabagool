@@ -35,6 +35,8 @@ type Option struct {
 	Value          interface{}
 	Type           OptionType
 	KeyboardPrompt string
+	KeyboardLayout KeyboardLayout // Layout to use for keyboard input (default: KeyboardLayoutGeneral)
+	URLShortcuts   []URLShortcut  // Custom shortcuts for URL keyboard (up to 10, only used when KeyboardLayout is KeyboardLayoutURL)
 	Masked         bool
 	OnUpdate       func(newValue interface{})
 }
@@ -569,7 +571,18 @@ func (olc *optionsListController) handleAButton(running *bool, result *OptionsLi
 			switch o.Type {
 			case OptionTypeKeyboard:
 				prompt := o.KeyboardPrompt
-				keyboardResult, err := Keyboard(prompt, olc.Settings.HelpExitText)
+				var keyboardResult *KeyboardResult
+				var err error
+
+				// Use URLKeyboard if layout is URL and shortcuts are provided
+				if o.KeyboardLayout == KeyboardLayoutURL && len(o.URLShortcuts) > 0 {
+					keyboardResult, err = URLKeyboard(prompt, olc.Settings.HelpExitText, URLKeyboardConfig{
+						Shortcuts: o.URLShortcuts,
+					})
+				} else {
+					keyboardResult, err = Keyboard(prompt, olc.Settings.HelpExitText, o.KeyboardLayout)
+				}
+
 				if err == nil {
 					enteredText := keyboardResult.Text
 					item.Options[item.SelectedOption] = Option{
@@ -577,6 +590,8 @@ func (olc *optionsListController) handleAButton(running *bool, result *OptionsLi
 						Value:          enteredText,
 						Type:           OptionTypeKeyboard,
 						KeyboardPrompt: enteredText,
+						KeyboardLayout: o.KeyboardLayout,
+						URLShortcuts:   o.URLShortcuts,
 						Masked:         o.Masked,
 					}
 				}
