@@ -10,9 +10,11 @@ import (
 // FooterHelpItem represents a button and its help text that should be displayed in the footer.
 // ButtonName is the text that will be displayed in the inner pill.
 // HelpText is the text that will be displayed in the outer pill to the right of the button.
+// IsConfirmButton marks this item as the confirm/start button, which can be hidden in multiselect mode when nothing is selected.
 type FooterHelpItem struct {
-	HelpText   string
-	ButtonName string
+	HelpText        string
+	ButtonName      string
+	IsConfirmButton bool
 }
 
 func renderFooter(
@@ -21,6 +23,7 @@ func renderFooter(
 	footerHelpItems []FooterHelpItem,
 	bottomPadding int32,
 	transparentBackground bool,
+	centerSingleItem bool,
 ) {
 	if len(footerHelpItems) == 0 {
 		return
@@ -66,7 +69,7 @@ func renderFooter(
 	}
 
 	if len(leftItems) > 0 {
-		if len(footerHelpItems) == 1 {
+		if len(footerHelpItems) == 1 && centerSingleItem {
 			pillWidth := calculateContinuousPillWidth(font, leftItems, outerPillHeight, innerPillMargin)
 			centerX := (windowWidth - pillWidth) / 2
 			renderGroupAsContinuousPill(renderer, font, leftItems, centerX, y, outerPillHeight, innerPillMargin)

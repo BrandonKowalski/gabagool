@@ -966,5 +966,6 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 		olc.Settings.FooterHelpItems,
 		olc.Settings.Margins.Bottom,
 		true,
+		true,
 	)
 }

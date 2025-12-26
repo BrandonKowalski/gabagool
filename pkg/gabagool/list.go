@@ -363,9 +363,10 @@ func (lc *listController) handleActionButtons(button constants.VirtualButton, ru
 
 	if button == constants.VirtualButtonStart {
 		if lc.MultiSelect && len(lc.Options.Items) > 0 {
-			*running = false
-			result.Action = ListActionSelected
+			// Only allow start button when at least one item is selected
 			if indices := lc.getSelectedItems(); len(indices) > 0 {
+				*running = false
+				result.Action = ListActionSelected
 				result.Selected = indices
 				result.VisiblePosition = indices[0] - lc.Options.VisibleStartIndex
 			}
@@ -685,7 +686,14 @@ func (lc *listController) renderContent(window *internal.Window, visibleItems []
 		lc.renderSelectedItemImage(renderer, lc.Options.Items[lc.Options.SelectedIndex].ImageFilename)
 	}
 
-	renderFooter(renderer, internal.Fonts.SmallFont, lc.Options.FooterHelpItems, lc.Options.Margins.Bottom, true)
+	// Filter footer items: hide confirm button when multiselect is active with no selections
+	footerItems := lc.Options.FooterHelpItems
+	centerSingleItem := len(lc.Options.FooterHelpItems) == 1
+	if lc.MultiSelect && len(lc.SelectedItems) == 0 {
+		footerItems = lc.filterConfirmButton(lc.Options.FooterHelpItems)
+	}
+
+	renderFooter(renderer, internal.Fonts.SmallFont, footerItems, lc.Options.Margins.Bottom, true, centerSingleItem)
 }
 
 func (lc *listController) imageIsDisplayed() bool {
@@ -1107,4 +1115,14 @@ func (lc *listController) getTextColor(focused bool) sdl.Color {
 		return internal.GetTheme().ListTextSelectedColor
 	}
 	return internal.GetTheme().ListTextColor
+}
+
+func (lc *listController) filterConfirmButton(items []FooterHelpItem) []FooterHelpItem {
+	filtered := make([]FooterHelpItem, 0, len(items))
+	for _, item := range items {
+		if !item.IsConfirmButton {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }

@@ -588,7 +588,7 @@ func (dm *downloadManager) render(renderer *sdl.Renderer) {
 		footerHelpItems = append(footerHelpItems, FooterHelpItem{ButtonName: "X", HelpText: speedToggleText})
 	}
 
-	renderFooter(renderer, internal.Fonts.SmallFont, footerHelpItems, 20, true)
+	renderFooter(renderer, internal.Fonts.SmallFont, footerHelpItems, 20, true, true)
 }
 
 func (dm *downloadManager) renderMultipleDownloads(renderer *sdl.Renderer, windowWidth int32, contentAreaStart int32, contentAreaHeight int32, filenameHeight int32, spacingBetweenFilenameAndBar int32, spacingBetweenDownloads int32, singleDownloadHeight int32) {

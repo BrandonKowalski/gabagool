@@ -760,6 +760,7 @@ func (s *detailScreenState) renderFooter(margins internal.Padding) {
 			s.footerHelpItems,
 			margins.Bottom,
 			false,
+			true,
 		)
 	}
 }

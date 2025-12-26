@@ -216,6 +216,7 @@ func renderFrame(renderer *sdl.Renderer, window *internal.Window, settings confi
 		settings.FooterHelpItems,
 		settings.Margins.Bottom,
 		false,
+		true,
 	)
 
 	renderer.Present()

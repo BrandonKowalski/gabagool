@@ -954,5 +954,6 @@ func (kb *virtualKeyboard) renderFooter(renderer *sdl.Renderer) {
 		},
 		20,
 		true,
+		true,
 	)
 }
