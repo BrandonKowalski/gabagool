@@ -43,6 +43,7 @@ type Option struct {
 
 type OptionListSettings struct {
 	InitialSelectedIndex  int
+	VisibleStartIndex     int
 	DisableBackButton     bool
 	FooterHelpItems       []FooterHelpItem
 	HelpExitText          string
@@ -233,6 +234,10 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 	// Use provided ConfirmButton or default to VirtualButtonStart
 	if listOptions.ConfirmButton != constants.VirtualButtonUnassigned {
 		optionsListController.Settings.ConfirmButton = listOptions.ConfirmButton
+	}
+
+	if listOptions.VisibleStartIndex > 0 && listOptions.VisibleStartIndex < len(items) {
+		optionsListController.VisibleStartIndex = listOptions.VisibleStartIndex
 	}
 
 	if listOptions.InitialSelectedIndex > 0 && listOptions.InitialSelectedIndex < len(items) {
