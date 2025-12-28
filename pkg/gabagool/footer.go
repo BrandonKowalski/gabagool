@@ -1,6 +1,7 @@
 package gabagool
 
 import (
+	"sync/atomic"
 	"unicode"
 
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/internal"
@@ -25,10 +26,12 @@ func containsExtendedUnicode(s string) bool {
 // ButtonName is the text that will be displayed in the inner pill.
 // HelpText is the text that will be displayed in the outer pill to the right of the button.
 // IsConfirmButton marks this item as the confirm/start button, which can be hidden in multiselect mode when nothing is selected.
+// Show is an optional atomic boolean that controls visibility. When not nil and false, the item is not rendered.
 type FooterHelpItem struct {
 	HelpText        string
 	ButtonName      string
 	IsConfirmButton bool
+	Show            *atomic.Bool
 }
 
 func renderFooter(
@@ -39,6 +42,20 @@ func renderFooter(
 	transparentBackground bool,
 	centerSingleItem bool,
 ) {
+	if len(footerHelpItems) == 0 {
+		return
+	}
+
+	// Filter out items where Show is not nil and false
+	visibleItems := make([]FooterHelpItem, 0, len(footerHelpItems))
+	for _, item := range footerHelpItems {
+		if item.Show != nil && !item.Show.Load() {
+			continue
+		}
+		visibleItems = append(visibleItems, item)
+	}
+	footerHelpItems = visibleItems
+
 	if len(footerHelpItems) == 0 {
 		return
 	}

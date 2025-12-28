@@ -790,6 +790,8 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 	selectionRectHeight := int32(float32(60) * scaleFactor)
 	cornerRadius := int32(float32(20) * scaleFactor)
 
+	statusBarWidth := calculateStatusBarWidth(internal.Fonts.SmallFont, internal.Fonts.SmallSymbolFont, olc.Settings.StatusBar)
+
 	if olc.Settings.Title != "" {
 		titleSurface, _ := titleFont.RenderUTF8Blended(olc.Settings.Title, sdl.Color{R: 255, G: 255, B: 255, A: 255})
 		if titleSurface != nil {
@@ -798,22 +800,26 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 			if titleTexture != nil {
 				defer titleTexture.Destroy()
 
+				maxTitleWidth := window.GetWidth() - olc.Settings.Margins.Left - olc.Settings.Margins.Right - statusBarWidth
+				displayWidth := titleSurface.W
+				if displayWidth > maxTitleWidth {
+					displayWidth = maxTitleWidth
+				}
+
 				var titleX int32
 				switch olc.Settings.TitleAlign {
 				case constants.TextAlignLeft:
 					titleX = olc.Settings.Margins.Left
 				case constants.TextAlignCenter:
-					titleX = (window.GetWidth() - titleSurface.W) / 2
+					titleX = (window.GetWidth() - displayWidth) / 2
 				case constants.TextAlignRight:
-					titleX = window.GetWidth() - olc.Settings.Margins.Right - titleSurface.W
+					titleX = window.GetWidth() - olc.Settings.Margins.Right - statusBarWidth - displayWidth
 				}
 
-				renderer.Copy(titleTexture, nil, &sdl.Rect{
-					X: titleX,
-					Y: olc.Settings.Margins.Top,
-					W: titleSurface.W,
-					H: titleSurface.H,
-				})
+				// Clip title to available width
+				srcRect := &sdl.Rect{X: 0, Y: 0, W: displayWidth, H: titleSurface.H}
+				destRect := &sdl.Rect{X: titleX, Y: olc.Settings.Margins.Top, W: displayWidth, H: titleSurface.H}
+				renderer.Copy(titleTexture, srcRect, destRect)
 
 				olc.StartY = olc.Settings.Margins.Top + titleSurface.H + olc.Settings.TitleSpacing
 			}

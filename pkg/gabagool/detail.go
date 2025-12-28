@@ -445,7 +445,9 @@ func (s *detailScreenState) render() {
 	footerHeight := int32(30)
 	safeAreaHeight := s.window.GetHeight() - footerHeight
 
-	currentY := s.renderTitle(margins)
+	statusBarWidth := calculateStatusBarWidth(internal.Fonts.SmallFont, internal.Fonts.SmallSymbolFont, s.options.StatusBar)
+
+	currentY := s.renderTitle(margins, statusBarWidth)
 	currentY, totalContentHeight := s.renderSections(margins, currentY, safeAreaHeight)
 
 	renderStatusBar(s.renderer, internal.Fonts.SmallFont, internal.Fonts.SmallSymbolFont, s.options.StatusBar, margins)
@@ -470,7 +472,7 @@ func (s *detailScreenState) clearScreen() {
 	}
 }
 
-func (s *detailScreenState) renderTitle(margins internal.Padding) int32 {
+func (s *detailScreenState) renderTitle(margins internal.Padding, statusBarWidth int32) int32 {
 	if s.titleTexture == nil {
 		return margins.Top + constants.DefaultTitleSpacing - s.scrollY
 	}
@@ -480,15 +482,22 @@ func (s *detailScreenState) renderTitle(margins internal.Padding) int32 {
 		return margins.Top + constants.DefaultTitleSpacing - s.scrollY
 	}
 
+	maxTitleWidth := s.window.GetWidth() - margins.Left - margins.Right - statusBarWidth
+	displayWidth := titleW
+	if displayWidth > maxTitleWidth {
+		displayWidth = maxTitleWidth
+	}
+
 	titleRect := sdl.Rect{
-		X: (s.window.GetWidth() - titleW) / 2,
+		X: margins.Left,
 		Y: margins.Top - s.scrollY,
-		W: titleW,
+		W: displayWidth,
 		H: titleH,
 	}
 
 	if isRectVisible(titleRect, s.window.GetHeight()) {
-		s.renderer.Copy(s.titleTexture, nil, &titleRect)
+		srcRect := &sdl.Rect{X: 0, Y: 0, W: displayWidth, H: titleH}
+		s.renderer.Copy(s.titleTexture, srcRect, &titleRect)
 	}
 
 	return margins.Top + titleH + constants.DefaultTitleSpacing - s.scrollY

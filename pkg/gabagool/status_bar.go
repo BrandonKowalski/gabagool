@@ -67,6 +67,119 @@ func DefaultStatusBarOptions() StatusBarOptions {
 	}
 }
 
+// calculateStatusBarWidth returns the total width of the status bar including pill and padding
+// This is used by components to adjust title max width
+func calculateStatusBarWidth(
+	font *ttf.Font,
+	symbolFont *ttf.Font,
+	options StatusBarOptions,
+) int32 {
+	if !options.Enabled {
+		return 0
+	}
+
+	scaleFactor := internal.GetScaleFactor()
+	outerPadding := int32(float32(20) * scaleFactor)
+	innerPadding := int32(float32(12) * scaleFactor)
+	iconSpacing := int32(float32(10) * scaleFactor)
+
+	var contentWidth int32
+
+	// Add time width
+	if options.ShowTime {
+		timeText := formatCurrentTime(options.TimeFormat)
+		surface, err := font.RenderUTF8Blended(timeText, internal.GetTheme().MainColor)
+		if err == nil && surface != nil {
+			contentWidth += surface.W
+			surface.Free()
+		}
+	}
+
+	// Add icon widths
+	maxIcons := 3
+	if len(options.Icons) < maxIcons {
+		maxIcons = len(options.Icons)
+	}
+
+	for i := 0; i < maxIcons; i++ {
+		icon := options.Icons[i]
+		var text string
+		if icon.Dynamic != nil {
+			text = icon.Dynamic.GetText()
+		} else {
+			text = icon.Text
+		}
+
+		if text != "" {
+			surface, err := symbolFont.RenderUTF8Blended(text, internal.GetTheme().MainColor)
+			if err == nil && surface != nil {
+				if contentWidth > 0 {
+					contentWidth += iconSpacing
+				}
+				contentWidth += surface.W
+				surface.Free()
+			}
+		}
+	}
+
+	if contentWidth == 0 {
+		return 0
+	}
+
+	// Total width = outer padding + pill (inner padding + content + inner padding) + some spacing
+	return outerPadding + (innerPadding * 2) + contentWidth + iconSpacing
+}
+
+// calculateStatusBarContentWidth calculates the width of the status bar content (time + icons)
+// without including the pill padding
+func calculateStatusBarContentWidth(
+	font *ttf.Font,
+	symbolFont *ttf.Font,
+	options StatusBarOptions,
+	iconSpacing int32,
+) int32 {
+	var contentWidth int32
+
+	// Add time width
+	if options.ShowTime {
+		timeText := formatCurrentTime(options.TimeFormat)
+		surface, err := font.RenderUTF8Blended(timeText, internal.GetTheme().MainColor)
+		if err == nil && surface != nil {
+			contentWidth += surface.W
+			surface.Free()
+		}
+	}
+
+	// Add icon widths
+	maxIcons := 3
+	if len(options.Icons) < maxIcons {
+		maxIcons = len(options.Icons)
+	}
+
+	for i := 0; i < maxIcons; i++ {
+		icon := options.Icons[i]
+		var text string
+		if icon.Dynamic != nil {
+			text = icon.Dynamic.GetText()
+		} else {
+			text = icon.Text
+		}
+
+		if text != "" {
+			surface, err := symbolFont.RenderUTF8Blended(text, internal.GetTheme().MainColor)
+			if err == nil && surface != nil {
+				if contentWidth > 0 {
+					contentWidth += iconSpacing
+				}
+				contentWidth += surface.W
+				surface.Free()
+			}
+		}
+	}
+
+	return contentWidth
+}
+
 // renderStatusBar renders the status bar in the top-right corner of the component
 func renderStatusBar(
 	renderer *sdl.Renderer,
@@ -83,14 +196,17 @@ func renderStatusBar(
 	window := internal.GetWindow()
 	windowWidth, _ := window.Window.GetSize()
 
-	padding := int32(float32(15) * scaleFactor)
+	outerPadding := int32(float32(20) * scaleFactor)
+	innerPadding := int32(float32(12) * scaleFactor)
 	iconSpacing := int32(float32(10) * scaleFactor)
 
-	// Start from right edge
-	currentX := windowWidth - margins.Right - padding
-	contentY := margins.Top + padding
+	// Calculate content width (without pill padding)
+	contentWidth := calculateStatusBarContentWidth(font, symbolFont, options, iconSpacing)
+	if contentWidth <= 0 {
+		return
+	}
 
-	// Get time text height for vertical alignment
+	// Get time text height for pill height
 	var timeHeight int32
 	if options.ShowTime {
 		timeText := formatCurrentTime(options.TimeFormat)
@@ -100,6 +216,20 @@ func renderStatusBar(
 			surface.Free()
 		}
 	}
+
+	pillHeight := timeHeight + (innerPadding * 2)
+	pillWidth := contentWidth + (innerPadding * 2)
+	pillX := windowWidth - margins.Right - outerPadding - pillWidth
+	pillY := margins.Top + outerPadding
+
+	// Draw pill background
+	pillRect := &sdl.Rect{X: pillX, Y: pillY, W: pillWidth, H: pillHeight}
+	cornerRadius := pillHeight / 2
+	internal.DrawRoundedRect(renderer, pillRect, cornerRadius, internal.GetTheme().PrimaryAccentColor)
+
+	// Content starts inside the pill
+	currentX := pillX + pillWidth - innerPadding
+	contentY := pillY + innerPadding
 
 	// 1. Render time (rightmost element)
 	if options.ShowTime {

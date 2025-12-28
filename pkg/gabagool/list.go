@@ -670,12 +670,14 @@ func (lc *listController) renderContent(window *internal.Window, visibleItems []
 		window.RenderBackground()
 	}
 
+	statusBarWidth := calculateStatusBarWidth(internal.Fonts.SmallFont, internal.Fonts.SmallSymbolFont, lc.Options.StatusBar)
+
 	if lc.Options.Title != "" {
 		titleFont := internal.Fonts.ExtraLargeFont
 		if lc.Options.SmallTitle {
 			titleFont = internal.Fonts.LargeFont
 		}
-		itemStartY = lc.renderScrollableTitle(renderer, titleFont, lc.Options.Title, lc.Options.TitleAlign, lc.StartY, lc.Options.Margins.Left+10) + lc.Options.TitleSpacing
+		itemStartY = lc.renderScrollableTitle(renderer, titleFont, lc.Options.Title, lc.Options.TitleAlign, lc.StartY, lc.Options.Margins.Left+10, statusBarWidth) + lc.Options.TitleSpacing
 	}
 
 	renderStatusBar(renderer, internal.Fonts.SmallFont, internal.Fonts.SmallSymbolFont, lc.Options.StatusBar, lc.Options.Margins)
@@ -911,7 +913,7 @@ func (lc *listController) renderSelectedItemImage(renderer *sdl.Renderer, imageF
 	renderer.Copy(texture, nil, &destRect)
 }
 
-func (lc *listController) renderScrollableTitle(renderer *sdl.Renderer, font *ttf.Font, title string, align constants.TextAlign, startY, marginLeft int32) int32 {
+func (lc *listController) renderScrollableTitle(renderer *sdl.Renderer, font *ttf.Font, title string, align constants.TextAlign, startY, marginLeft, statusBarWidth int32) int32 {
 	surface, _ := font.RenderUTF8Blended(title, internal.GetTheme().ListTextColor)
 	if surface == nil {
 		return startY + 40
@@ -925,7 +927,7 @@ func (lc *listController) renderScrollableTitle(renderer *sdl.Renderer, font *tt
 	defer texture.Destroy()
 
 	screenWidth, _, _ := renderer.GetOutputSize()
-	availableWidth := screenWidth - (marginLeft * 2)
+	availableWidth := screenWidth - (marginLeft * 2) - statusBarWidth
 
 	if surface.W > availableWidth {
 		lc.renderScrollingTitle(renderer, texture, surface.H, availableWidth, marginLeft, startY)
