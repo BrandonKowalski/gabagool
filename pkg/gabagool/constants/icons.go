@@ -4,6 +4,8 @@ const Start = "\U000F040A"
 const Select = "\uEACC"
 const LeftRight = "\U000F0E73"
 
+const WiFi = "\uF1EB"
+
 const CloudRefresh = "\U000F052A"
 const CloudDownload = "\U000F0162"
 const CloudUpload = "\U000F0167"

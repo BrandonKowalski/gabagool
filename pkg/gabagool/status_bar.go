@@ -80,7 +80,7 @@ func calculateStatusBarWidth(
 
 	scaleFactor := internal.GetScaleFactor()
 	outerPadding := int32(float32(20) * scaleFactor)
-	innerPadding := int32(float32(6) * scaleFactor)
+	innerPaddingX := int32(float32(10) * scaleFactor)
 	iconSpacing := int32(float32(8) * scaleFactor)
 
 	var contentWidth int32
@@ -127,7 +127,7 @@ func calculateStatusBarWidth(
 	}
 
 	// Total width = outer padding + pill (inner padding + content + inner padding) + some spacing
-	return outerPadding + (innerPadding * 2) + contentWidth + iconSpacing
+	return outerPadding + (innerPaddingX * 2) + contentWidth + iconSpacing
 }
 
 // calculateStatusBarContentWidth calculates the width of the status bar content (time + icons)
@@ -197,7 +197,8 @@ func renderStatusBar(
 	windowWidth, _ := window.Window.GetSize()
 
 	outerPadding := int32(float32(20) * scaleFactor)
-	innerPadding := int32(float32(6) * scaleFactor)
+	innerPaddingX := int32(float32(10) * scaleFactor)
+	innerPaddingY := int32(float32(6) * scaleFactor)
 	iconSpacing := int32(float32(8) * scaleFactor)
 
 	// Calculate content width (without pill padding)
@@ -206,19 +207,43 @@ func renderStatusBar(
 		return
 	}
 
-	// Get time text height for pill height
-	var timeHeight int32
+	// Calculate content height from time or icons (whichever is taller)
+	var contentHeight int32
 	if options.ShowTime {
 		timeText := formatCurrentTime(options.TimeFormat)
 		surface, err := font.RenderUTF8Blended(timeText, internal.GetTheme().MainColor)
 		if err == nil && surface != nil {
-			timeHeight = surface.H
+			contentHeight = surface.H
 			surface.Free()
 		}
 	}
 
-	pillHeight := timeHeight + (innerPadding * 2)
-	pillWidth := contentWidth + (innerPadding * 2)
+	// Check icon heights if no time or icons are taller
+	maxIcons := 3
+	if len(options.Icons) < maxIcons {
+		maxIcons = len(options.Icons)
+	}
+	for i := 0; i < maxIcons; i++ {
+		icon := options.Icons[i]
+		var text string
+		if icon.Dynamic != nil {
+			text = icon.Dynamic.GetText()
+		} else {
+			text = icon.Text
+		}
+		if text != "" {
+			surface, err := symbolFont.RenderUTF8Blended(text, internal.GetTheme().MainColor)
+			if err == nil && surface != nil {
+				if surface.H > contentHeight {
+					contentHeight = surface.H
+				}
+				surface.Free()
+			}
+		}
+	}
+
+	pillHeight := contentHeight + (innerPaddingY * 2)
+	pillWidth := contentWidth + (innerPaddingX * 2)
 	pillX := windowWidth - margins.Right - outerPadding - pillWidth
 	pillY := int32(20) // Align with title start position
 
@@ -228,8 +253,8 @@ func renderStatusBar(
 	internal.DrawRoundedRect(renderer, pillRect, cornerRadius, internal.GetTheme().PrimaryAccentColor)
 
 	// Content starts inside the pill
-	currentX := pillX + pillWidth - innerPadding
-	contentY := pillY + innerPadding
+	currentX := pillX + pillWidth - innerPaddingX
+	contentY := pillY + innerPaddingY
 
 	// 1. Render time (rightmost element)
 	if options.ShowTime {
@@ -238,16 +263,11 @@ func renderStatusBar(
 		currentX -= iconSpacing
 	}
 
-	// 2. Render icons (up to 3, right to left), vertically centered with time
-	maxIcons := 3
-	if len(options.Icons) < maxIcons {
-		maxIcons = len(options.Icons)
-	}
-
+	// 2. Render icons (up to 3, right to left), vertically centered
 	// Icons render right-to-left (last icon closest to time)
 	for i := maxIcons - 1; i >= 0; i-- {
 		icon := options.Icons[i]
-		currentX = renderStatusBarIcon(renderer, symbolFont, icon, currentX, contentY, timeHeight)
+		currentX = renderStatusBarIcon(renderer, symbolFont, icon, currentX, contentY, contentHeight)
 		if i > 0 {
 			currentX -= iconSpacing
 		}
