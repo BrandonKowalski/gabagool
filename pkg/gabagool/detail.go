@@ -488,8 +488,11 @@ func (s *detailScreenState) renderTitle(margins internal.Padding, statusBarWidth
 		displayWidth = maxTitleWidth
 	}
 
+	// Center the title horizontally
+	titleX := (s.window.GetWidth() - displayWidth) / 2
+
 	titleRect := sdl.Rect{
-		X: margins.Left,
+		X: titleX,
 		Y: margins.Top - s.scrollY,
 		W: displayWidth,
 		H: titleH,

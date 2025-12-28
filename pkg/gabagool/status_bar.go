@@ -80,8 +80,8 @@ func calculateStatusBarWidth(
 
 	scaleFactor := internal.GetScaleFactor()
 	outerPadding := int32(float32(20) * scaleFactor)
-	innerPadding := int32(float32(12) * scaleFactor)
-	iconSpacing := int32(float32(10) * scaleFactor)
+	innerPadding := int32(float32(6) * scaleFactor)
+	iconSpacing := int32(float32(8) * scaleFactor)
 
 	var contentWidth int32
 
@@ -197,8 +197,8 @@ func renderStatusBar(
 	windowWidth, _ := window.Window.GetSize()
 
 	outerPadding := int32(float32(20) * scaleFactor)
-	innerPadding := int32(float32(12) * scaleFactor)
-	iconSpacing := int32(float32(10) * scaleFactor)
+	innerPadding := int32(float32(6) * scaleFactor)
+	iconSpacing := int32(float32(8) * scaleFactor)
 
 	// Calculate content width (without pill padding)
 	contentWidth := calculateStatusBarContentWidth(font, symbolFont, options, iconSpacing)
@@ -220,7 +220,7 @@ func renderStatusBar(
 	pillHeight := timeHeight + (innerPadding * 2)
 	pillWidth := contentWidth + (innerPadding * 2)
 	pillX := windowWidth - margins.Right - outerPadding - pillWidth
-	pillY := margins.Top + outerPadding
+	pillY := int32(20) // Align with title start position
 
 	// Draw pill background
 	pillRect := &sdl.Rect{X: pillX, Y: pillY, W: pillWidth, H: pillHeight}

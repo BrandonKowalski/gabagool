@@ -45,6 +45,7 @@ type OptionListSettings struct {
 	InitialSelectedIndex  int
 	VisibleStartIndex     int
 	DisableBackButton     bool
+	SmallTitle            bool
 	FooterHelpItems       []FooterHelpItem
 	HelpExitText          string
 	ActionButton          constants.VirtualButton
@@ -90,6 +91,7 @@ type internalOptionsListSettings struct {
 	Title                 string
 	TitleAlign            constants.TextAlign
 	TitleSpacing          int32
+	SmallTitle            bool
 	ScrollSpeed           float32
 	ScrollPauseTime       int
 	FooterHelpItems       []FooterHelpItem
@@ -232,6 +234,7 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 	optionsListController.MaxVisibleItems = int(optionsListController.calculateMaxVisibleItems(window))
 	optionsListController.Settings.FooterHelpItems = listOptions.FooterHelpItems
 	optionsListController.Settings.DisableBackButton = listOptions.DisableBackButton
+	optionsListController.Settings.SmallTitle = listOptions.SmallTitle
 	optionsListController.Settings.HelpExitText = listOptions.HelpExitText
 	optionsListController.Settings.ActionButton = listOptions.ActionButton
 	optionsListController.Settings.SecondaryActionButton = listOptions.SecondaryActionButton
@@ -336,7 +339,11 @@ func (olc *optionsListController) calculateMaxVisibleItems(window *internal.Wind
 
 	var titleHeight int32 = 0
 	if olc.Settings.Title != "" {
-		titleHeight = int32(float32(60) * scaleFactor)
+		if olc.Settings.SmallTitle {
+			titleHeight = int32(float32(50) * scaleFactor)
+		} else {
+			titleHeight = int32(float32(60) * scaleFactor)
+		}
 		titleHeight += olc.Settings.TitleSpacing
 	}
 
@@ -783,7 +790,10 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 
 	scaleFactor := internal.GetScaleFactor()
 	window := internal.GetWindow()
-	titleFont := internal.Fonts.LargeFont
+	titleFont := internal.Fonts.ExtraLargeFont
+	if olc.Settings.SmallTitle {
+		titleFont = internal.Fonts.LargeFont
+	}
 	font := internal.Fonts.SmallFont
 
 	itemSpacing := int32(float32(60) * scaleFactor)
