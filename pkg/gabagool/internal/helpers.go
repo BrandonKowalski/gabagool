@@ -261,81 +261,41 @@ func RenderMultilineTextWithCache(
 
 func DrawRoundedRect(renderer *sdl.Renderer, rect *sdl.Rect, radius int32, color sdl.Color) {
 	if radius <= 0 {
+		renderer.SetDrawColor(color.R, color.G, color.B, color.A)
 		renderer.FillRect(rect)
 		return
 	}
 
-	gfx.BoxColor(
-		renderer,
-		rect.X+radius,
-		rect.Y,
-		rect.X+rect.W-radius,
-		rect.Y+rect.H,
-		color,
-	)
-
-	gfx.BoxColor(
-		renderer,
-		rect.X,
-		rect.Y+radius,
-		rect.X+radius,
-		rect.Y+rect.H-radius,
-		color,
-	)
-	gfx.BoxColor(
-		renderer,
-		rect.X+rect.W-radius,
-		rect.Y+radius,
-		rect.X+rect.W,
-		rect.Y+rect.H-radius,
-		color,
-	)
-
-	// Top-left corner
-	drawRoundedCorner(renderer, rect.X+radius, rect.Y+radius, radius, color)
-	// Top-right corner
-	drawRoundedCorner(renderer, rect.X+rect.W-radius, rect.Y+radius, radius, color)
-	// Bottom-left corner
-	drawRoundedCorner(renderer, rect.X+radius, rect.Y+rect.H-radius, radius, color)
-	// Bottom-right corner
-	drawRoundedCorner(renderer, rect.X+rect.W-radius, rect.Y+rect.H-radius, radius, color)
-}
-
-func drawRoundedCorner(renderer *sdl.Renderer, centerX, centerY, radius int32, color sdl.Color) {
-	// Fill the corner
-	gfx.FilledCircleColor(renderer, centerX, centerY, radius, color)
-
-	// Add anti-aliased edge for smooth appearance
-	gfx.AACircleColor(renderer, centerX, centerY, radius, color)
-
-	// Add additional anti-aliased circles based on radius size for extra smoothness
-	// Larger radii benefit from multiple AA layers to eliminate jaggedness
-	if radius > 15 {
-		// Large pills (like list items) - add 3 layers of AA
-		gfx.AACircleColor(renderer, centerX, centerY, radius-1, color)
-		gfx.AACircleColor(renderer, centerX, centerY, radius-2, color)
-	} else if radius > 5 {
-		// Medium pills (like footer buttons) - add 2 layers of AA
-		gfx.AACircleColor(renderer, centerX, centerY, radius-1, color)
-	} else if radius > 2 {
-		// Small pills - add 1 layer of AA
-		gfx.AACircleColor(renderer, centerX, centerY, radius-1, color)
+	// Clamp radius to half the smaller dimension
+	maxRadius := rect.W / 2
+	if rect.H/2 < maxRadius {
+		maxRadius = rect.H / 2
 	}
+	if radius > maxRadius {
+		radius = maxRadius
+	}
+
+	// Use native SDL2_gfx rounded rectangle functions for smoother edges
+	x1 := rect.X
+	y1 := rect.Y
+	x2 := rect.X + rect.W - 1
+	y2 := rect.Y + rect.H - 1
+
+	// Draw filled rounded rectangle
+	gfx.RoundedBoxColor(renderer, x1, y1, x2, y2, radius, color)
+
+	// Add anti-aliased outline for smoother edges
+	gfx.RoundedRectangleColor(renderer, x1, y1, x2, y2, radius, color)
 }
 
-// DrawSmoothScrollbar renders a scrollbar with anti-aliased rounded ends
+// DrawSmoothScrollbar renders a simple square scrollbar
 func DrawSmoothScrollbar(renderer *sdl.Renderer, x, y, width, height int32, color sdl.Color) {
 	if width <= 0 || height <= 0 {
 		return
 	}
 
-	// For narrow scrollbars, use fully rounded ends
-	radius := width / 2
-	if height < width {
-		radius = height / 2
-	}
-
-	DrawRoundedRect(renderer, &sdl.Rect{X: x, Y: y, W: width, H: height}, radius, color)
+	renderer.SetDrawColor(color.R, color.G, color.B, color.A)
+	renderer.FillRect(&sdl.Rect{X: x, Y: y, W: width, H: height})
 }
 
 // DrawSmoothProgressBar renders a progress bar with smooth rounded edges

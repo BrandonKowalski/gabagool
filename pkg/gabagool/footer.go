@@ -169,10 +169,9 @@ func renderGroupAsContinuousPill(
 	currentX := startX + int32(float32(10)*scaleFactor)
 	innerPillHeight := outerPillHeight - (innerPillMargin * 2)
 
-	// Apply damping to Padding for smaller screens
 	var paddingFactor float32 = 1.0
 	if scaleFactor < 1.0 {
-		paddingFactor = 0.5 + (scaleFactor * 0.5) // Reduces Padding impact on small screens
+		paddingFactor = 0.5 + (scaleFactor * 0.5)
 	}
 	rightPadding := int32(float32(30) * paddingFactor)
 
@@ -208,7 +207,7 @@ func renderGroupAsContinuousPill(
 		if err == nil {
 			buttonTextRect := &sdl.Rect{
 				X: currentX + (innerPillWidth-buttonSurface.W)/2,
-				Y: y + (outerPillHeight-buttonSurface.H)/2,
+				Y: y + innerPillMargin + (innerPillHeight-buttonSurface.H)/2,
 				W: buttonSurface.W,
 				H: buttonSurface.H,
 			}

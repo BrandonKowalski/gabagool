@@ -913,6 +913,9 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 			internal.DrawRoundedRect(renderer, selectionRect, cornerRadius, sdl.Color{R: bgColor.R, G: bgColor.G, B: bgColor.B, A: bgColor.A})
 		}
 
+		// Calculate vertical center within selection rect
+		selectionRectY := itemY - 5
+
 		itemSurface, _ := font.RenderUTF8Blended(item.Item.Text, textColor)
 		if itemSurface != nil {
 			defer itemSurface.Free()
@@ -921,7 +924,7 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 				defer itemTexture.Destroy()
 				renderer.Copy(itemTexture, nil, &sdl.Rect{
 					X: olc.Settings.Margins.Left,
-					Y: itemY,
+					Y: selectionRectY + (selectionRectHeight-itemSurface.H)/2,
 					W: itemSurface.W,
 					H: itemSurface.H,
 				})
@@ -949,7 +952,7 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 
 						renderer.Copy(optionTexture, nil, &sdl.Rect{
 							X: window.GetWidth() - olc.Settings.Margins.Right - optionSurface.W,
-							Y: itemY,
+							Y: selectionRectY + (selectionRectHeight-optionSurface.H)/2,
 							W: optionSurface.W,
 							H: optionSurface.H,
 						})
@@ -967,7 +970,7 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 
 						renderer.Copy(optionTexture, nil, &sdl.Rect{
 							X: window.GetWidth() - olc.Settings.Margins.Right - optionSurface.W,
-							Y: itemY,
+							Y: selectionRectY + (selectionRectHeight-optionSurface.H)/2,
 							W: optionSurface.W,
 							H: optionSurface.H,
 						})
@@ -1002,14 +1005,16 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 						// Position the text to the left of the swatch
 						textX := swatchX - optionSurface.W - swatchSpacing
 
-						// Center the swatch vertically with the text
-						textCenterY := itemY + (optionSurface.H / 2)
-						swatchY := textCenterY - (swatchHeight / 2)
+						// Center text vertically within selection rect
+						textY := selectionRectY + (selectionRectHeight-optionSurface.H)/2
+
+						// Center the swatch vertically within selection rect
+						swatchY := selectionRectY + (selectionRectHeight-swatchHeight)/2
 
 						// draw the text on the left
 						renderer.Copy(optionTexture, nil, &sdl.Rect{
 							X: textX,
-							Y: itemY,
+							Y: textY,
 							W: optionSurface.W,
 							H: optionSurface.H,
 						})
@@ -1049,7 +1054,7 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 
 						renderer.Copy(optionTexture, nil, &sdl.Rect{
 							X: window.GetWidth() - olc.Settings.Margins.Right - optionSurface.W,
-							Y: itemY,
+							Y: selectionRectY + (selectionRectHeight-optionSurface.H)/2,
 							W: optionSurface.W,
 							H: optionSurface.H,
 						})

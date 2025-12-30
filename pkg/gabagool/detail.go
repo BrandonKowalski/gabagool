@@ -740,10 +740,26 @@ func (s *detailScreenState) renderScrollbar(safeAreaHeight int32) {
 	}
 
 	scrollbarWidth := int32(10)
-	scrollbarHeight := int32(float64(safeAreaHeight) * float64(safeAreaHeight) / float64(s.maxScrollY+safeAreaHeight))
-	scrollbarHeight = internal.Max32(scrollbarHeight, 30)
+	trackY := int32(5)
+	trackHeight := safeAreaHeight - 10
 
-	scrollbarY := int32(float64(s.scrollY) * float64(safeAreaHeight-scrollbarHeight) / float64(s.maxScrollY))
+	// Calculate handle height proportional to visible content
+	totalContentHeight := s.maxScrollY + safeAreaHeight
+	handleHeight := int32(float64(trackHeight) * float64(safeAreaHeight) / float64(totalContentHeight))
+
+	// Clamp handle height between reasonable bounds
+	handleHeight = internal.Max32(handleHeight, 20)
+	handleHeight = internal.Min32(handleHeight, trackHeight/3) // Handle should be at most 1/3 of track
+
+	// Calculate handle position within track bounds
+	var handleY int32
+	if s.scrollY >= s.maxScrollY {
+		handleY = trackHeight - handleHeight
+	} else if s.scrollY <= 0 {
+		handleY = 0
+	} else {
+		handleY = int32(float64(s.scrollY) * float64(trackHeight-handleHeight) / float64(s.maxScrollY))
+	}
 
 	scrollbarX := s.window.GetWidth() - scrollbarWidth - 5
 
@@ -755,16 +771,16 @@ func (s *detailScreenState) renderScrollbar(safeAreaHeight int32) {
 		255)
 	s.renderer.FillRect(&sdl.Rect{
 		X: scrollbarX - 2,
-		Y: 3,
+		Y: trackY - 2,
 		W: scrollbarWidth + 4,
-		H: safeAreaHeight - 6,
+		H: trackHeight + 4,
 	})
 
-	// Draw scrollbar background with smooth edges (using full opacity to avoid blending artifacts)
-	internal.DrawSmoothScrollbar(s.renderer, scrollbarX, 5, scrollbarWidth, safeAreaHeight-10, sdl.Color{R: 50, G: 50, B: 50, A: 255})
+	// Draw scrollbar track
+	internal.DrawSmoothScrollbar(s.renderer, scrollbarX, trackY, scrollbarWidth, trackHeight, sdl.Color{R: 50, G: 50, B: 50, A: 255})
 
-	// Draw scrollbar handle with smooth edges (using full opacity to avoid blending artifacts)
-	internal.DrawSmoothScrollbar(s.renderer, scrollbarX, 5+scrollbarY, scrollbarWidth, scrollbarHeight, sdl.Color{R: 100, G: 100, B: 100, A: 255})
+	// Draw scrollbar handle
+	internal.DrawSmoothScrollbar(s.renderer, scrollbarX, trackY+handleY, scrollbarWidth, handleHeight, sdl.Color{R: 100, G: 100, B: 100, A: 255})
 }
 
 func (s *detailScreenState) renderFooter(margins internal.Padding) {

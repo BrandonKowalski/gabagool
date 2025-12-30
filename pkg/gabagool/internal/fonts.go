@@ -8,7 +8,7 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
-//go:embed embedded_fonts/SauceCodePro-NerdFont.ttf
+//go:embed embedded_fonts/HackGenConsoleNF-Bold.ttf
 var defaultFont []byte
 
 //go:embed embedded_fonts/nextui/RoundedMplus1cNerdFont-Bold.ttf
