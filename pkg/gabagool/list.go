@@ -439,24 +439,30 @@ func (lc *listController) moveSelection(delta int) {
 		}
 	} else { // Page jumps
 		if delta > 0 { // Page right
-			if len(lc.Options.Items) <= lc.Options.MaxVisibleItems {
-				newIndex = len(lc.Options.Items) - 1
+			firstOffScreen := lc.Options.VisibleStartIndex + lc.Options.MaxVisibleItems
+			if firstOffScreen < len(lc.Options.Items) {
+				// There are off-screen items to the right - skip to them
+				newIndex = firstOffScreen
+				lc.Options.VisibleStartIndex = firstOffScreen
 			} else {
-				maxStart := len(lc.Options.Items) - lc.Options.MaxVisibleItems
-				if lc.Options.VisibleStartIndex+lc.Options.MaxVisibleItems >= len(lc.Options.Items) {
-					newIndex = len(lc.Options.Items) - 1
-					lc.Options.VisibleStartIndex = maxStart
-				} else {
-					newIndex = min(lc.Options.VisibleStartIndex+lc.Options.MaxVisibleItems, len(lc.Options.Items)-1)
-					lc.Options.VisibleStartIndex = newIndex
-				}
+				// No off-screen items - go to bottom of current visible page
+				newIndex = min(lc.Options.VisibleStartIndex+lc.Options.MaxVisibleItems-1, len(lc.Options.Items)-1)
 			}
 		} else { // Page left
-			if lc.Options.VisibleStartIndex == 0 {
-				newIndex = 0
+			if lc.Options.SelectedIndex != lc.Options.VisibleStartIndex {
+				// Not at top of current page - go to top of current page first
+				newIndex = lc.Options.VisibleStartIndex
+			} else if lc.Options.VisibleStartIndex > 0 {
+				// At top of current page and there's a previous page - skip back
+				newStart := lc.Options.VisibleStartIndex - lc.Options.MaxVisibleItems
+				if newStart < 0 {
+					newStart = 0
+				}
+				newIndex = newStart
+				lc.Options.VisibleStartIndex = newStart
 			} else {
-				newIndex = max(lc.Options.VisibleStartIndex-lc.Options.MaxVisibleItems, 0)
-				lc.Options.VisibleStartIndex = newIndex
+				// Already at top of first page - stay
+				newIndex = 0
 			}
 		}
 	}
