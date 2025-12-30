@@ -247,11 +247,7 @@ func renderStatusBar(
 	// Draw pill background
 	pillRect := &sdl.Rect{X: pillX, Y: pillY, W: pillWidth, H: pillHeight}
 	cornerRadius := pillHeight / 2
-	pillColor := internal.GetTheme().AccentColor
-	internal.DrawRoundedRect(renderer, pillRect, cornerRadius, pillColor)
-
-	// Calculate contrast color for text based on pill background
-	textColor := internal.GetContrastColor(pillColor)
+	internal.DrawRoundedRect(renderer, pillRect, cornerRadius, internal.GetTheme().AccentColor)
 
 	// Content starts inside the pill
 	currentX := pillX + pillWidth - innerPaddingX
@@ -260,7 +256,7 @@ func renderStatusBar(
 	// 1. Render time (rightmost element)
 	if options.ShowTime {
 		timeText := formatCurrentTime(options.TimeFormat)
-		currentX = renderStatusBarTime(renderer, font, timeText, currentX, contentY, textColor)
+		currentX = renderStatusBarTime(renderer, font, timeText, currentX, contentY)
 		currentX -= iconSpacing
 	}
 
@@ -268,7 +264,7 @@ func renderStatusBar(
 	// Icons render right-to-left (last icon closest to time)
 	for i := maxIcons - 1; i >= 0; i-- {
 		icon := options.Icons[i]
-		currentX = renderStatusBarIcon(renderer, font, icon, currentX, contentY, contentHeight, textColor)
+		currentX = renderStatusBarIcon(renderer, font, icon, currentX, contentY, contentHeight)
 		if i > 0 {
 			currentX -= iconSpacing
 		}
@@ -292,8 +288,8 @@ func renderStatusBarTime(
 	font *ttf.Font,
 	timeText string,
 	rightX, y int32,
-	textColor sdl.Color,
 ) int32 {
+	textColor := internal.GetTheme().HintColor
 	surface, err := font.RenderUTF8Blended(timeText, textColor)
 	if err != nil || surface == nil {
 		return rightX
@@ -318,7 +314,6 @@ func renderStatusBarIcon(
 	font *ttf.Font,
 	icon StatusBarIcon,
 	rightX, y, lineHeight int32,
-	textColor sdl.Color,
 ) int32 {
 	// Resolve text (dynamic takes priority)
 	var text string
@@ -332,6 +327,7 @@ func renderStatusBarIcon(
 		return rightX
 	}
 
+	textColor := internal.GetTheme().HintColor
 	surface, err := font.RenderUTF8Blended(text, textColor)
 	if err != nil || surface == nil {
 		return rightX
