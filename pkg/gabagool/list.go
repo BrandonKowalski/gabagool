@@ -90,6 +90,7 @@ type listController struct {
 	helpOverlay     *helpOverlay
 	itemScrollData  map[int]*internal.TextScrollData
 	titleScrollData *internal.TextScrollData
+	textureCache    *internal.TextureCache
 
 	heldDirections struct {
 		up, down, left, right bool
@@ -126,9 +127,16 @@ func newListController(options ListOptions) *listController {
 		helpOverlay:     helpOverlay,
 		itemScrollData:  make(map[int]*internal.TextScrollData),
 		titleScrollData: &internal.TextScrollData{},
+		textureCache:    internal.NewTextureCache(),
 		lastRepeatTime:  time.Now(),
 		repeatDelay:     150 * time.Millisecond,
 		repeatInterval:  50 * time.Millisecond,
+	}
+}
+
+func (lc *listController) cleanup() {
+	if lc.textureCache != nil {
+		lc.textureCache.Destroy()
 	}
 }
 
@@ -141,6 +149,7 @@ func List(options ListOptions) (*ListResult, error) {
 	}
 
 	lc := newListController(options)
+	defer lc.cleanup()
 
 	lc.Options.MaxVisibleItems = int(lc.calculateMaxVisibleItems(window))
 
@@ -157,7 +166,9 @@ func List(options ListOptions) (*ListResult, error) {
 	}
 
 	for running {
-		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+		// Use WaitEventTimeout to reduce CPU usage when idle
+		// 16ms timeout gives ~60fps max while allowing CPU to sleep
+		if event := sdl.WaitEventTimeout(16); event != nil {
 			switch event.(type) {
 			case *sdl.QuitEvent:
 				running = false
@@ -183,7 +194,6 @@ func List(options ListOptions) (*ListResult, error) {
 
 		lc.render(window)
 		renderer.Present()
-		sdl.Delay(16)
 	}
 
 	// Update result with final item order (in case items were reordered)
@@ -868,20 +878,30 @@ func (lc *listController) renderEmptyMessage(renderer *sdl.Renderer, font *ttf.F
 }
 
 func (lc *listController) renderSelectedItemBackground(window *internal.Window, imageFilename string) {
-	bgTexture, err := img.LoadTexture(window.Renderer, imageFilename)
-	if err != nil {
-		return
+	cacheKey := "bg:" + imageFilename
+	bgTexture := lc.textureCache.Get(cacheKey)
+	if bgTexture == nil {
+		var err error
+		bgTexture, err = img.LoadTexture(window.Renderer, imageFilename)
+		if err != nil {
+			return
+		}
+		lc.textureCache.Set(cacheKey, bgTexture)
 	}
-	defer bgTexture.Destroy()
 	window.Renderer.Copy(bgTexture, nil, &sdl.Rect{X: 0, Y: 0, W: window.GetWidth(), H: window.GetHeight()})
 }
 
 func (lc *listController) renderSelectedItemImage(renderer *sdl.Renderer, imageFilename string) {
-	texture, err := img.LoadTexture(renderer, imageFilename)
-	if err != nil {
-		return
+	cacheKey := "img:" + imageFilename
+	texture := lc.textureCache.Get(cacheKey)
+	if texture == nil {
+		var err error
+		texture, err = img.LoadTexture(renderer, imageFilename)
+		if err != nil {
+			return
+		}
+		lc.textureCache.Set(cacheKey, texture)
 	}
-	defer texture.Destroy()
 
 	_, _, textureWidth, textureHeight, _ := texture.Query()
 	screenWidth, screenHeight, _ := renderer.GetOutputSize()

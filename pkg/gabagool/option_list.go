@@ -298,7 +298,7 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 	var err error
 
 	for running {
-		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+		if event := sdl.WaitEventTimeout(16); event != nil {
 			switch event.(type) {
 			case *sdl.QuitEvent:
 				running = false
@@ -344,8 +344,6 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 		}
 
 		renderer.Present()
-
-		sdl.Delay(16)
 	}
 
 	if err != nil {

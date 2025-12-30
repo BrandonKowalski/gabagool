@@ -111,8 +111,7 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 	var quitErr error
 
 	for running {
-
-		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+		if event := sdl.WaitEventTimeout(16); event != nil {
 			if _, ok := event.(*sdl.QuitEvent); ok {
 				running = false
 				quitErr = sdl.GetError()
@@ -128,10 +127,8 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 				processor.isProcessing = false
 				processor.completeTime = time.Now()
 			default:
-
 			}
 		} else {
-
 			if time.Since(processor.completeTime) > 350*time.Millisecond {
 				running = false
 			}
@@ -139,8 +136,6 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 
 		processor.render(renderer)
 		renderer.Present()
-
-		sdl.Delay(16)
 	}
 
 	if processor.imageTexture != nil {

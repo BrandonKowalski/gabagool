@@ -160,7 +160,7 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 	var err error
 
 	for running {
-		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+		if event := sdl.WaitEventTimeout(16); event != nil {
 			switch event.(type) {
 			case *sdl.QuitEvent:
 				running = false
@@ -170,25 +170,17 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 
 			case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
 				inputEvent := processor.ProcessSDLEvent(event.(sdl.Event))
-				if inputEvent == nil || !inputEvent.Pressed {
-					continue
-				}
+				if inputEvent != nil && inputEvent.Pressed && downloadManager.isInputAllowed() {
+					downloadManager.lastInputTime = time.Now()
 
-				if !downloadManager.isInputAllowed() {
-					continue
-				}
-				downloadManager.lastInputTime = time.Now()
-
-				if downloadManager.isAllComplete {
-					running = false
-					continue
-				}
-
-				if inputEvent.Button == constants.VirtualButtonY {
-					downloadManager.cancelAllDownloads()
-					cancelled = true
-				} else if inputEvent.Button == constants.VirtualButtonX {
-					downloadManager.showSpeed = !downloadManager.showSpeed
+					if downloadManager.isAllComplete {
+						running = false
+					} else if inputEvent.Button == constants.VirtualButtonY {
+						downloadManager.cancelAllDownloads()
+						cancelled = true
+					} else if inputEvent.Button == constants.VirtualButtonX {
+						downloadManager.showSpeed = !downloadManager.showSpeed
+					}
 				}
 			}
 		}
@@ -204,14 +196,11 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 
 			if opts.AutoContinue && len(downloadManager.failedDownloads) == 0 {
 				running = false
-				continue
 			}
 		}
 
 		downloadManager.render(renderer)
 		renderer.Present()
-
-		sdl.Delay(16)
 	}
 
 	if err != nil {

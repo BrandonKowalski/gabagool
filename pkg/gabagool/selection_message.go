@@ -108,7 +108,6 @@ func SelectionMessage(message string, options []SelectionOption, footerHelpItems
 		}
 
 		controller.render(renderer, window)
-		sdl.Delay(16)
 	}
 
 	if controller.cancelled {
@@ -124,7 +123,7 @@ func SelectionMessage(message string, options []SelectionOption, footerHelpItems
 func (c *selectionMessageController) handleEvents() bool {
 	processor := internal.GetInputProcessor()
 
-	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+	if event := sdl.WaitEventTimeout(16); event != nil {
 		switch event.(type) {
 		case *sdl.QuitEvent:
 			c.cancelled = true
@@ -133,11 +132,11 @@ func (c *selectionMessageController) handleEvents() bool {
 		case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
 			inputEvent := processor.ProcessSDLEvent(event.(sdl.Event))
 			if inputEvent == nil || !inputEvent.Pressed {
-				continue
+				return true
 			}
 
 			if time.Since(c.lastInputTime) < c.inputDelay {
-				continue
+				return true
 			}
 			c.lastInputTime = time.Now()
 

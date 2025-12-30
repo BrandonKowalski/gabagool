@@ -98,7 +98,6 @@ func ConfirmationMessage(message string, footerHelpItems []FooterHelpItem, optio
 		}
 
 		renderFrame(renderer, window, settings, imageTexture, imageRect)
-		sdl.Delay(16)
 	}
 
 	if !result.Confirmed {
@@ -142,7 +141,7 @@ func loadAndPrepareImage(renderer *sdl.Renderer, settings confirmationMessageSet
 func handleEvents(result *ConfirmationResult, lastInputTime *time.Time, settings confirmationMessageSettings) bool {
 	processor := internal.GetInputProcessor()
 
-	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+	if event := sdl.WaitEventTimeout(16); event != nil {
 		switch event.(type) {
 		case *sdl.QuitEvent:
 			result.Confirmed = false
@@ -151,11 +150,11 @@ func handleEvents(result *ConfirmationResult, lastInputTime *time.Time, settings
 		case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
 			inputEvent := processor.ProcessSDLEvent(event.(sdl.Event))
 			if inputEvent == nil || !inputEvent.Pressed {
-				continue
+				return true
 			}
 
 			if !isInputAllowed(*lastInputTime, settings.InputDelay) {
-				continue
+				return true
 			}
 
 			*lastInputTime = time.Now()
