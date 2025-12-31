@@ -24,6 +24,8 @@ const (
 	SourceKeyboard Source = iota
 	SourceController
 	SourceJoystick
+	SourceJoystickAxisPositive
+	SourceJoystickAxisNegative
 	SourceHatSwitch
 )
 
@@ -233,7 +235,9 @@ func LoadInputMappingFromBytes(data []byte) (*InputMapping, error) {
 	return mapping, nil
 }
 
-func (im *InputMapping) SaveToJSON(filePath string) error {
+// ToJSON converts the InputMapping to JSON bytes in the export format.
+// Keys are SDL codes, values are VirtualButton iota values.
+func (im *InputMapping) ToJSON() ([]byte, error) {
 	serializableMapping := &Mapping{
 		KeyboardMap:         make(map[int]int),
 		ControllerButtonMap: make(map[int]int),
@@ -279,7 +283,11 @@ func (im *InputMapping) SaveToJSON(filePath string) error {
 		serializableMapping.JoystickHatMap[int(hat)] = int(button)
 	}
 
-	data, err := json.MarshalIndent(serializableMapping, "", "  ")
+	return json.MarshalIndent(serializableMapping, "", "  ")
+}
+
+func (im *InputMapping) SaveToJSON(filePath string) error {
+	data, err := im.ToJSON()
 	if err != nil {
 		return fmt.Errorf("failed to marshal mapping to JSON: %w", err)
 	}

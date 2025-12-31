@@ -16,14 +16,18 @@ type buttonConfig struct {
 	displayName    string
 }
 
+type mappedInput struct {
+	code   int
+	source internal.Source
+}
+
 type inputLoggerController struct {
 	lastInput         string
 	lastButtonName    string
 	font              *ttf.Font
 	textColor         sdl.Color
 	currentButtonIdx  int
-	mappedButtons     map[constants.VirtualButton]int
-	currentSource     internal.Source
+	mappedButtons     map[constants.VirtualButton]mappedInput
 	mutex             sync.Mutex
 	buttonSequence    []buttonConfig
 	lastInputTime     time.Time
@@ -37,7 +41,7 @@ func newInputLogger() *inputLoggerController {
 		lastButtonName:    "",
 		font:              internal.Fonts.LargeFont,
 		textColor:         sdl.Color{R: 200, G: 100, B: 255, A: 255},
-		mappedButtons:     make(map[constants.VirtualButton]int),
+		mappedButtons:     make(map[constants.VirtualButton]mappedInput),
 		currentButtonIdx:  0,
 		debounceDelay:     1000 * time.Millisecond,
 		waitingForRelease: false,
@@ -143,8 +147,10 @@ func (il *inputLoggerController) handleEvent(event sdl.Event) bool {
 			// Store the KEYCODE (Sym), not the scancode
 			il.lastInput = fmt.Sprintf("Keyboard: %d", int(e.Keysym.Sym))
 			il.lastButtonName = "Registered!"
-			il.mappedButtons[currentButton.internalButton] = int(e.Keysym.Sym)
-			il.currentSource = internal.SourceKeyboard
+			il.mappedButtons[currentButton.internalButton] = mappedInput{
+				code:   int(e.Keysym.Sym),
+				source: internal.SourceKeyboard,
+			}
 			il.lastInputTime = time.Now()
 			il.waitingForRelease = true
 			internal.GetInternalLogger().Debug("Registered keyboard button",
@@ -157,8 +163,10 @@ func (il *inputLoggerController) handleEvent(event sdl.Event) bool {
 		if e.State == sdl.PRESSED {
 			il.lastInput = fmt.Sprintf("Joystick Button: %d", int(e.Button))
 			il.lastButtonName = "Registered!"
-			il.mappedButtons[currentButton.internalButton] = int(e.Button)
-			il.currentSource = internal.SourceJoystick
+			il.mappedButtons[currentButton.internalButton] = mappedInput{
+				code:   int(e.Button),
+				source: internal.SourceJoystick,
+			}
 			il.lastInputTime = time.Now()
 			il.waitingForRelease = true
 			internal.GetInternalLogger().Debug("Registered joystick button",
@@ -170,8 +178,10 @@ func (il *inputLoggerController) handleEvent(event sdl.Event) bool {
 		if e.State == sdl.PRESSED {
 			il.lastInput = fmt.Sprintf("Game Controller: %d", int(e.Button))
 			il.lastButtonName = "Registered!"
-			il.mappedButtons[currentButton.internalButton] = int(e.Button)
-			il.currentSource = internal.SourceController
+			il.mappedButtons[currentButton.internalButton] = mappedInput{
+				code:   int(e.Button),
+				source: internal.SourceController,
+			}
 			il.lastInputTime = time.Now()
 			il.waitingForRelease = true
 			internal.GetInternalLogger().Debug("Registered controller button",
@@ -182,16 +192,22 @@ func (il *inputLoggerController) handleEvent(event sdl.Event) bool {
 	case *sdl.JoyAxisEvent:
 		// Only log significant axis movements
 		if internal.Abs(int(e.Value)) > 16000 {
-			direction := "Positive"
+			var source internal.Source
+			var direction string
 			if e.Value > 16000 {
 				il.lastInput = fmt.Sprintf("Joystick Axis %d (Positive)", int(e.Axis))
+				source = internal.SourceJoystickAxisPositive
+				direction = "Positive"
 			} else {
 				il.lastInput = fmt.Sprintf("Joystick Axis %d (Negative)", int(e.Axis))
+				source = internal.SourceJoystickAxisNegative
 				direction = "Negative"
 			}
 			il.lastButtonName = "Registered!"
-			il.mappedButtons[currentButton.internalButton] = int(e.Axis)
-			il.currentSource = internal.SourceJoystick
+			il.mappedButtons[currentButton.internalButton] = mappedInput{
+				code:   int(e.Axis),
+				source: source,
+			}
 			il.lastInputTime = time.Now()
 			il.waitingForRelease = true
 			internal.GetInternalLogger().Debug("Registered joystick axis",
@@ -214,10 +230,12 @@ func (il *inputLoggerController) handleEvent(event sdl.Event) bool {
 			case sdl.HAT_RIGHT:
 				hatName = "RIGHT"
 			}
-			il.lastInput = fmt.Sprintf("Hat Switch: %s", hatName)
+			il.lastInput = fmt.Sprintf("Hat Switch: %s (%d)", hatName, e.Value)
 			il.lastButtonName = "Registered!"
-			il.mappedButtons[currentButton.internalButton] = int(e.Hat)
-			il.currentSource = internal.SourceHatSwitch
+			il.mappedButtons[currentButton.internalButton] = mappedInput{
+				code:   int(e.Value), // Store the hat VALUE (direction), not the hat index
+				source: internal.SourceHatSwitch,
+			}
 			il.lastInputTime = time.Now()
 			il.waitingForRelease = true
 			internal.GetInternalLogger().Debug("Registered hat switch",
@@ -291,26 +309,36 @@ func (il *inputLoggerController) buildMapping() *internal.InputMapping {
 		JoystickHatMap:      make(map[uint8]constants.VirtualButton),
 	}
 
-	// Populate the mapping based on the current source and mapped buttons
-	for button, code := range il.mappedButtons {
-		switch il.currentSource {
+	// Populate the mapping based on each button's individual source
+	for button, input := range il.mappedButtons {
+		switch input.source {
 		case internal.SourceKeyboard:
-			mapping.KeyboardMap[sdl.Keycode(code)] = button
+			mapping.KeyboardMap[sdl.Keycode(input.code)] = button
 		case internal.SourceController:
-			mapping.ControllerButtonMap[sdl.GameControllerButton(code)] = button
+			mapping.ControllerButtonMap[sdl.GameControllerButton(input.code)] = button
 		case internal.SourceJoystick:
-			mapping.JoystickButtonMap[uint8(code)] = button
+			mapping.JoystickButtonMap[uint8(input.code)] = button
+		case internal.SourceJoystickAxisPositive:
+			axisMapping := mapping.JoystickAxisMap[uint8(input.code)]
+			axisMapping.PositiveButton = button
+			axisMapping.Threshold = 16000
+			mapping.JoystickAxisMap[uint8(input.code)] = axisMapping
+		case internal.SourceJoystickAxisNegative:
+			axisMapping := mapping.JoystickAxisMap[uint8(input.code)]
+			axisMapping.NegativeButton = button
+			axisMapping.Threshold = 16000
+			mapping.JoystickAxisMap[uint8(input.code)] = axisMapping
 		case internal.SourceHatSwitch:
-			mapping.JoystickHatMap[uint8(code)] = button
+			mapping.JoystickHatMap[uint8(input.code)] = button
 		}
 	}
 
 	internal.GetInternalLogger().Info("Input mapping complete",
 		"totalMapped", len(il.mappedButtons),
-		"inputSource", il.currentSource,
 		"keyboardMappings", len(mapping.KeyboardMap),
 		"controllerButtonMappings", len(mapping.ControllerButtonMap),
 		"joystickButtonMappings", len(mapping.JoystickButtonMap),
+		"joystickAxisMappings", len(mapping.JoystickAxisMap),
 		"hatSwitchMappings", len(mapping.JoystickHatMap))
 
 	return mapping
