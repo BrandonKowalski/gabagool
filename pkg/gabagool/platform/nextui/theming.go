@@ -53,7 +53,6 @@ func InitNextUITheme() internal.Theme {
 		HighlightedTextColor: parseHexColor(nv.Color5),
 		HintColor:            parseHexColor(nv.Color6),
 		BackgroundColor:      parseHexColor(nv.BGColor),
-		FontPath:             nv.FontPath,
 	}
 
 	if constants.IsDevMode() {
