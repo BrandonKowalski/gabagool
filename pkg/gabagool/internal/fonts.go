@@ -11,6 +11,33 @@ import (
 //go:embed embedded_fonts/HackGenConsoleNF-Bold.ttf
 var defaultFont []byte
 
+//go:embed embedded_fonts/nextui/RoundedMplus1cNerdFont-Bold.ttf
+var nextUIFont1 []byte
+
+//go:embed embedded_fonts/nextui/BPreplayNerdFont-Bold.ttf
+var nextUIFont2 []byte
+
+// NextUI font configuration
+var (
+	isNextUIMode   bool
+	nextUIFontType int // 1 = RoundedMPlus1C (default), 2 = BPreplay
+)
+
+// SetNextUIMode configures the font system for NextUI mode
+func SetNextUIMode(enabled bool, fontType int) {
+	isNextUIMode = enabled
+	nextUIFontType = fontType
+}
+
+// getNextUIEmbeddedFont returns the appropriate NextUI font based on configuration
+func getNextUIEmbeddedFont() []byte {
+	if nextUIFontType == 2 {
+		return nextUIFont2
+	}
+	// Default to font1 (RoundedMPlus1C)
+	return nextUIFont1
+}
+
 type FontSizes struct {
 	XLarge int `json:"xlarge" yaml:"xlarge"`
 	Large  int `json:"large" yaml:"large"`
@@ -107,6 +134,10 @@ func loadFont(path string, fallback string, size int) *ttf.Font {
 		GetInternalLogger().Debug("Failed to load fallback font, using embedded font", "fallback", fallback, "error", err)
 	}
 
+	// Use NextUI embedded font if in NextUI mode, otherwise default
+	if isNextUIMode {
+		return loadEmbeddedFont(getNextUIEmbeddedFont(), size)
+	}
 	return loadEmbeddedFont(defaultFont, size)
 }
 

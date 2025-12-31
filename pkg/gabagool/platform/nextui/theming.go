@@ -36,8 +36,14 @@ func InitNextUITheme() internal.Theme {
 	}
 
 	if err != nil {
+		// Enable NextUI mode with default font (RoundedMPlus1C)
+		internal.SetNextUIMode(true, 1)
 		return defaultTheme
 	}
+
+	// Set NextUI mode with font choice from nextval
+	// Font 1 = RoundedMPlus1C, Font 2 = BPreplay
+	internal.SetNextUIMode(true, nv.Font)
 
 	theme := internal.Theme{
 		HighlightColor:       parseHexColor(nv.Color1),
