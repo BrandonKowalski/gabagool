@@ -873,7 +873,7 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 				destRect := &sdl.Rect{X: titleX, Y: olc.Settings.Margins.Top, W: displayWidth, H: titleSurface.H}
 				renderer.Copy(titleTexture, srcRect, destRect)
 
-				olc.StartY = olc.Settings.Margins.Top + titleSurface.H + olc.Settings.TitleSpacing
+				olc.StartY = olc.Settings.Margins.Top + titleSurface.H + olc.Settings.TitleSpacing + 5
 			}
 		}
 	}
