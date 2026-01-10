@@ -21,17 +21,26 @@ const (
 	SectionTypeInfo
 	SectionTypeDescription
 	SectionTypeImage
+	SectionTypeDropdown
 )
 
+type DropdownOption struct {
+	Label string
+	Value string
+}
+
 type Section struct {
-	Type        int
-	Title       string
-	ImagePaths  []string
-	Metadata    []MetadataItem
-	Description string
-	MaxWidth    int32
-	MaxHeight   int32
-	Alignment   int
+	Type            int
+	Title           string
+	ImagePaths      []string
+	Metadata        []MetadataItem
+	Description     string
+	MaxWidth        int32
+	MaxHeight       int32
+	Alignment       int
+	DropdownOptions []DropdownOption
+	DropdownID      string
+	DefaultIndex    int
 }
 
 type DetailScreenOptions struct {
@@ -42,6 +51,7 @@ type DetailScreenOptions struct {
 	BackgroundColor     sdl.Color
 	EnableAction        bool
 	ActionButton        constants.VirtualButton
+	ConfirmButton       constants.VirtualButton
 	MaxImageHeight      int32
 	MaxImageWidth       int32
 	ShowScrollbar       bool
@@ -49,9 +59,17 @@ type DetailScreenOptions struct {
 	StatusBar           StatusBarOptions
 }
 
+// DropdownSelection represents the selected option from a dropdown.
+type DropdownSelection struct {
+	ID     string
+	Option DropdownOption
+	Index  int
+}
+
 // DetailScreenResult represents the result of the DetailScreen component.
 type DetailScreenResult struct {
-	Action DetailAction
+	Action             DetailAction
+	DropdownSelections []DropdownSelection
 }
 
 type detailScreenState struct {
@@ -67,6 +85,9 @@ type detailScreenState struct {
 	lastInputTime          time.Time
 	inputDelay             time.Duration
 	slideshowStates        map[int]slideshowState
+	dropdownStates         map[string]*dropdownState
+	focusedDropdownID      string
+	visibleDropdownID      string
 	textureCache           *internal.TextureCache
 	titleTexture           *sdl.Texture
 	sectionTitleTextures   []*sdl.Texture
@@ -87,6 +108,12 @@ type slideshowState struct {
 	dimensions   []sdl.Rect
 }
 
+type dropdownState struct {
+	selectedIndex    int
+	highlightedIndex int
+	expanded         bool
+}
+
 func DefaultInfoScreenOptions() DetailScreenOptions {
 	return DetailScreenOptions{
 		Sections:         []Section{},
@@ -95,6 +122,7 @@ func DefaultInfoScreenOptions() DetailScreenOptions {
 		DescriptionColor: sdl.Color{R: 200, G: 200, B: 200, A: 255},
 		BackgroundColor:  sdl.Color{R: 0, G: 0, B: 0, A: 255},
 		ActionButton:     constants.VirtualButtonA,
+		ConfirmButton:    constants.VirtualButtonA,
 		ShowScrollbar:    true,
 		EnableAction:     false,
 	}
@@ -137,6 +165,16 @@ func NewImageSection(title string, imagePath string, maxWidth, maxHeight int32, 
 	}
 }
 
+func NewDropdownSection(title string, id string, options []DropdownOption, defaultIndex int) Section {
+	return Section{
+		Type:            SectionTypeDropdown,
+		Title:           title,
+		DropdownID:      id,
+		DropdownOptions: options,
+		DefaultIndex:    defaultIndex,
+	}
+}
+
 // DetailScreen displays a scrollable detail screen with sections.
 func DetailScreen(title string, options DetailScreenOptions, footerHelpItems []FooterHelpItem) (*DetailScreenResult, error) {
 	state := initializeDetailScreenState(title, options, footerHelpItems)
@@ -148,10 +186,28 @@ func DetailScreen(title string, options DetailScreenOptions, footerHelpItems []F
 		state.render()
 	}
 
+	state.collectDropdownSelections()
+
 	if state.result.Action == DetailActionCancelled {
 		return nil, ErrCancelled
 	}
 	return &state.result, nil
+}
+
+func (s *detailScreenState) collectDropdownSelections() {
+	for _, section := range s.options.Sections {
+		if section.Type == SectionTypeDropdown && section.DropdownID != "" {
+			if state, ok := s.dropdownStates[section.DropdownID]; ok {
+				if state.selectedIndex >= 0 && state.selectedIndex < len(section.DropdownOptions) {
+					s.result.DropdownSelections = append(s.result.DropdownSelections, DropdownSelection{
+						ID:     section.DropdownID,
+						Option: section.DropdownOptions[state.selectedIndex],
+						Index:  state.selectedIndex,
+					})
+				}
+			}
+		}
+	}
 }
 
 func initializeDetailScreenState(title string, options DetailScreenOptions, footerHelpItems []FooterHelpItem) *detailScreenState {
@@ -166,6 +222,7 @@ func initializeDetailScreenState(title string, options DetailScreenOptions, foot
 		lastInputTime:         time.Now(),
 		inputDelay:            constants.DefaultInputDelay,
 		slideshowStates:       make(map[int]slideshowState),
+		dropdownStates:        make(map[string]*dropdownState),
 		textureCache:          internal.NewTextureCache(),
 		metadataLabelTextures: make(map[int][]*sdl.Texture),
 		repeatDelay:           time.Millisecond * 150,
@@ -177,6 +234,7 @@ func initializeDetailScreenState(title string, options DetailScreenOptions, foot
 	state.initializeImageDefaults()
 	state.loadTextures(title)
 	state.initializeSlideshows()
+	state.initializeDropdowns()
 
 	return state
 }
@@ -218,6 +276,22 @@ func (s *detailScreenState) initializeSlideshows() {
 			state := s.createSlideshowState(section)
 			if len(state.textures) > 0 {
 				s.slideshowStates[i] = state
+			}
+		}
+	}
+}
+
+func (s *detailScreenState) initializeDropdowns() {
+	for _, section := range s.options.Sections {
+		if section.Type == SectionTypeDropdown && section.DropdownID != "" {
+			defaultIdx := section.DefaultIndex
+			if defaultIdx < 0 || defaultIdx >= len(section.DropdownOptions) {
+				defaultIdx = 0
+			}
+			s.dropdownStates[section.DropdownID] = &dropdownState{
+				selectedIndex:    defaultIdx,
+				highlightedIndex: defaultIdx,
+				expanded:         false,
 			}
 		}
 	}
@@ -339,6 +413,11 @@ func (s *detailScreenState) handleInputEvent(inputEvent *internal.Event) {
 	}
 	s.lastInputTime = time.Now()
 
+	// Check if any dropdown is expanded and handle its input
+	if s.handleExpandedDropdownInput(inputEvent) {
+		return
+	}
+
 	switch inputEvent.Button {
 	case constants.VirtualButtonUp:
 		s.startScrolling(true)
@@ -348,13 +427,94 @@ func (s *detailScreenState) handleInputEvent(inputEvent *internal.Event) {
 		s.handleSlideshowNavigation(inputEvent.Button == constants.VirtualButtonLeft)
 	case constants.VirtualButtonB:
 		s.result.Action = DetailActionCancelled
-	case constants.VirtualButtonA, constants.VirtualButtonStart:
-		s.result.Action = DetailActionConfirmed
+	case constants.VirtualButtonA:
+		// A button is used to expand/interact with dropdowns
+		s.handleDropdownActivation()
+	case constants.VirtualButtonStart:
+		// Start triggers confirm if no dropdown to activate
+		if !s.handleDropdownActivation() {
+			s.result.Action = DetailActionConfirmed
+		}
+	case s.options.ConfirmButton:
+		// Confirm button triggers confirm action (e.g., download)
+		if inputEvent.Button != constants.VirtualButtonA {
+			s.result.Action = DetailActionConfirmed
+		}
 	case s.options.ActionButton:
-		if s.options.EnableAction {
+		if s.options.EnableAction && inputEvent.Button != s.options.ConfirmButton {
 			s.result.Action = DetailActionTriggered
 		}
 	}
+}
+
+func (s *detailScreenState) handleExpandedDropdownInput(inputEvent *internal.Event) bool {
+	// Find any expanded dropdown
+	var expandedID string
+	var expandedState *dropdownState
+	var section *Section
+
+	for i := range s.options.Sections {
+		sec := &s.options.Sections[i]
+		if sec.Type == SectionTypeDropdown && sec.DropdownID != "" {
+			if state, ok := s.dropdownStates[sec.DropdownID]; ok && state.expanded {
+				expandedID = sec.DropdownID
+				expandedState = state
+				section = sec
+				break
+			}
+		}
+	}
+
+	if expandedState == nil {
+		return false
+	}
+
+	switch inputEvent.Button {
+	case constants.VirtualButtonUp:
+		if expandedState.highlightedIndex > 0 {
+			expandedState.highlightedIndex--
+		}
+		return true
+	case constants.VirtualButtonDown:
+		if expandedState.highlightedIndex < len(section.DropdownOptions)-1 {
+			expandedState.highlightedIndex++
+		}
+		return true
+	case constants.VirtualButtonA:
+		// Select the highlighted option and collapse
+		expandedState.selectedIndex = expandedState.highlightedIndex
+		expandedState.expanded = false
+		return true
+	case constants.VirtualButtonB:
+		// Just collapse without changing selection
+		expandedState.highlightedIndex = expandedState.selectedIndex
+		expandedState.expanded = false
+		return true
+	}
+
+	_ = expandedID // Suppress unused variable warning
+	return false
+}
+
+func (s *detailScreenState) handleDropdownActivation() bool {
+	// Only activate a dropdown if it's currently visible
+	if s.visibleDropdownID == "" {
+		return false
+	}
+
+	// Find the visible dropdown and expand it
+	for _, section := range s.options.Sections {
+		if section.Type == SectionTypeDropdown && section.DropdownID == s.visibleDropdownID {
+			if state, ok := s.dropdownStates[section.DropdownID]; ok {
+				// Focus and expand this dropdown
+				s.focusedDropdownID = section.DropdownID
+				state.expanded = true
+				state.highlightedIndex = state.selectedIndex
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *detailScreenState) handleInputEventRelease(inputEvent *internal.Event) {
@@ -518,6 +678,7 @@ func (s *detailScreenState) renderSections(margins internal.Padding, startY int3
 	}
 
 	s.activeSlideshow = -1
+	s.visibleDropdownID = ""
 
 	for sectionIndex, section := range s.options.Sections {
 		if sectionIndex > 0 {
@@ -575,6 +736,8 @@ func (s *detailScreenState) renderSectionContent(sectionIndex int, section Secti
 		return s.renderInfo(sectionIndex, section, margins, contentWidth, currentY, safeAreaHeight)
 	case SectionTypeDescription:
 		return s.renderDescription(section, margins, contentWidth, currentY, safeAreaHeight)
+	case SectionTypeDropdown:
+		return s.renderDropdown(section, margins, contentWidth, currentY, safeAreaHeight)
 	}
 	return currentY
 }
@@ -727,6 +890,161 @@ func (s *detailScreenState) renderDescription(section Section, margins internal.
 	}
 
 	return currentY + descHeight + 15
+}
+
+func (s *detailScreenState) renderDropdown(section Section, margins internal.Padding, contentWidth, currentY int32, safeAreaHeight int32) int32 {
+	if section.DropdownID == "" || len(section.DropdownOptions) == 0 {
+		return currentY
+	}
+
+	state, ok := s.dropdownStates[section.DropdownID]
+	if !ok {
+		return currentY
+	}
+
+	dropdownX := margins.Left
+	dropdownWidth := contentWidth
+	itemHeight := int32(35)
+	isFocused := s.focusedDropdownID == section.DropdownID
+
+	if state.expanded {
+		return s.renderExpandedDropdown(section, state, dropdownX, dropdownWidth, itemHeight, currentY, safeAreaHeight)
+	}
+	return s.renderCollapsedDropdown(section, state, dropdownX, dropdownWidth, itemHeight, currentY, safeAreaHeight, isFocused)
+}
+
+func (s *detailScreenState) renderCollapsedDropdown(section Section, state *dropdownState, dropdownX, dropdownWidth, itemHeight, currentY int32, safeAreaHeight int32, isFocused bool) int32 {
+	// Draw background
+	bgColor := sdl.Color{R: 40, G: 40, B: 40, A: 255}
+	if isFocused {
+		bgColor = sdl.Color{R: 60, G: 60, B: 80, A: 255}
+	}
+
+	dropdownRect := sdl.Rect{X: dropdownX, Y: currentY, W: dropdownWidth, H: itemHeight}
+	if isRectVisible(dropdownRect, safeAreaHeight) {
+		// Mark this dropdown as visible for input handling
+		s.visibleDropdownID = section.DropdownID
+
+		s.renderer.SetDrawColor(bgColor.R, bgColor.G, bgColor.B, bgColor.A)
+		s.renderer.FillRect(&dropdownRect)
+
+		// Draw border
+		borderColor := sdl.Color{R: 80, G: 80, B: 80, A: 255}
+		if isFocused {
+			borderColor = sdl.Color{R: 100, G: 100, B: 200, A: 255}
+		}
+		s.renderer.SetDrawColor(borderColor.R, borderColor.G, borderColor.B, borderColor.A)
+		s.renderer.DrawRect(&dropdownRect)
+
+		// Draw selected option text
+		if state.selectedIndex >= 0 && state.selectedIndex < len(section.DropdownOptions) {
+			selectedOption := section.DropdownOptions[state.selectedIndex]
+			textX := dropdownX + 10
+			textY := currentY + (itemHeight-int32(internal.Fonts.SmallFont.Height()))/2
+
+			internal.RenderMultilineTextWithCache(
+				s.renderer,
+				selectedOption.Label,
+				internal.Fonts.SmallFont,
+				dropdownWidth-50,
+				textX,
+				textY,
+				sdl.Color{R: 255, G: 255, B: 255, A: 255},
+				constants.TextAlignLeft,
+				s.textureCache)
+		}
+
+		// Draw dropdown arrow indicator
+		arrowX := dropdownX + dropdownWidth - 25
+		arrowY := currentY + itemHeight/2
+		s.renderDropdownArrow(arrowX, arrowY, false)
+	}
+
+	return currentY + itemHeight + 15
+}
+
+func (s *detailScreenState) renderExpandedDropdown(section Section, state *dropdownState, dropdownX, dropdownWidth, itemHeight, currentY int32, safeAreaHeight int32) int32 {
+	totalHeight := itemHeight * int32(len(section.DropdownOptions))
+
+	// Draw background for all options
+	bgRect := sdl.Rect{X: dropdownX, Y: currentY, W: dropdownWidth, H: totalHeight}
+	if isRectVisible(bgRect, safeAreaHeight) {
+		// Mark this dropdown as visible for input handling
+		s.visibleDropdownID = section.DropdownID
+
+		s.renderer.SetDrawColor(40, 40, 40, 255)
+		s.renderer.FillRect(&bgRect)
+
+		// Draw border
+		s.renderer.SetDrawColor(100, 100, 200, 255)
+		s.renderer.DrawRect(&bgRect)
+	}
+
+	// Draw each option
+	for i, option := range section.DropdownOptions {
+		optionY := currentY + int32(i)*itemHeight
+		optionRect := sdl.Rect{X: dropdownX, Y: optionY, W: dropdownWidth, H: itemHeight}
+
+		if isRectVisible(optionRect, safeAreaHeight) {
+			// Highlight the currently highlighted option
+			if i == state.highlightedIndex {
+				s.renderer.SetDrawColor(80, 80, 120, 255)
+				s.renderer.FillRect(&optionRect)
+			}
+
+			// Draw checkmark for selected option
+			if i == state.selectedIndex {
+				checkX := dropdownX + 8
+				checkY := optionY + (itemHeight-int32(internal.Fonts.SmallFont.Height()))/2
+				internal.RenderMultilineTextWithCache(
+					s.renderer,
+					"*",
+					internal.Fonts.SmallFont,
+					20,
+					checkX,
+					checkY,
+					sdl.Color{R: 100, G: 200, B: 100, A: 255},
+					constants.TextAlignLeft,
+					s.textureCache)
+			}
+
+			// Draw option text
+			textX := dropdownX + 25
+			textY := optionY + (itemHeight-int32(internal.Fonts.SmallFont.Height()))/2
+
+			textColor := sdl.Color{R: 200, G: 200, B: 200, A: 255}
+			if i == state.highlightedIndex {
+				textColor = sdl.Color{R: 255, G: 255, B: 255, A: 255}
+			}
+
+			internal.RenderMultilineTextWithCache(
+				s.renderer,
+				option.Label,
+				internal.Fonts.SmallFont,
+				dropdownWidth-40,
+				textX,
+				textY,
+				textColor,
+				constants.TextAlignLeft,
+				s.textureCache)
+		}
+	}
+
+	return currentY + totalHeight + 15
+}
+
+func (s *detailScreenState) renderDropdownArrow(x, y int32, expanded bool) {
+	// Draw a simple triangle arrow
+	s.renderer.SetDrawColor(200, 200, 200, 255)
+	if expanded {
+		// Up arrow
+		s.renderer.DrawLine(x, y+3, x+5, y-3)
+		s.renderer.DrawLine(x+5, y-3, x+10, y+3)
+	} else {
+		// Down arrow
+		s.renderer.DrawLine(x, y-3, x+5, y+3)
+		s.renderer.DrawLine(x+5, y+3, x+10, y-3)
+	}
 }
 
 func (s *detailScreenState) updateScrollLimits(totalContentHeight int32, safeAreaHeight int32, margins internal.Padding) {
