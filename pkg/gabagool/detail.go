@@ -429,11 +429,15 @@ func (s *detailScreenState) handleInputEvent(inputEvent *internal.Event) {
 		s.result.Action = DetailActionCancelled
 	case constants.VirtualButtonA:
 		// A button is used to expand/interact with dropdowns
-		s.handleDropdownActivation()
+		// If no dropdown was activated and A is the ConfirmButton, trigger confirm
+		if !s.handleDropdownActivation() && s.options.ConfirmButton == constants.VirtualButtonA {
+			s.result.Action = DetailActionConfirmed
+		}
 	case constants.VirtualButtonStart:
 		s.result.Action = DetailActionConfirmed
 	case s.options.ConfirmButton:
 		// Confirm button triggers confirm action (e.g., download)
+		// Skip A button since it's handled above
 		if inputEvent.Button != constants.VirtualButtonA {
 			s.result.Action = DetailActionConfirmed
 		}
