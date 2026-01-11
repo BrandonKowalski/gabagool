@@ -1,6 +1,7 @@
 package gabagool
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,8 +36,9 @@ type DownloadResult struct {
 }
 
 type DownloadManagerOptions struct {
-	AutoContinue  bool
-	MaxConcurrent int
+	AutoContinue       bool
+	MaxConcurrent      int
+	InsecureSkipVerify bool
 }
 
 type downloadJob struct {
@@ -73,9 +75,10 @@ type downloadManager struct {
 
 	scrollOffset int32
 
-	headers       map[string]string
-	lastInputTime time.Time
-	inputDelay    time.Duration
+	headers            map[string]string
+	lastInputTime      time.Time
+	inputDelay         time.Duration
+	insecureSkipVerify bool
 
 	showSpeed bool
 }
@@ -119,6 +122,7 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 	if opts.MaxConcurrent > 0 {
 		downloadManager.maxConcurrent = opts.MaxConcurrent
 	}
+	downloadManager.insecureSkipVerify = opts.InsecureSkipVerify
 
 	result := DownloadResult{
 		Completed: []Download{},
@@ -339,6 +343,14 @@ func (dm *downloadManager) downloadFile(job *downloadJob) {
 	transport.MaxIdleConns = 100
 	transport.IdleConnTimeout = 90 * time.Second
 	transport.MaxIdleConnsPerHost = 10
+
+	// Apply InsecureSkipVerify if configured
+	if dm.insecureSkipVerify {
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{}
+		}
+		transport.TLSClientConfig.InsecureSkipVerify = true
+	}
 
 	client := &http.Client{
 		Timeout:   job.timeout,
