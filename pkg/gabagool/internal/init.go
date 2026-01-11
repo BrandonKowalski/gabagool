@@ -1,3 +1,3 @@
 package internal
 
-import _ "github.com/UncleJunVIP/certifiable"
+import _ "github.com/BrandonKowalski/certifiable"
