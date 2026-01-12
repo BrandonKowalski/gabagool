@@ -441,8 +441,9 @@ func (s *detailScreenState) handleInputEvent(inputEvent *internal.Event) {
 		if inputEvent.Button != constants.VirtualButtonA {
 			s.result.Action = DetailActionConfirmed
 		}
-	case s.options.ActionButton:
-		if s.options.EnableAction && inputEvent.Button != s.options.ConfirmButton {
+	case constants.VirtualButtonY:
+		// Y button for action/options
+		if s.options.EnableAction && s.options.ActionButton == constants.VirtualButtonY {
 			s.result.Action = DetailActionTriggered
 		}
 	}
