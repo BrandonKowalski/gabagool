@@ -13,6 +13,7 @@ import (
 type Options struct {
 	WindowTitle          string
 	ShowBackground       bool
+	WindowOptions        internal.WindowOptions
 	PrimaryThemeColorHex uint32
 	IsCannoli            bool
 	IsNextUI             bool
@@ -58,7 +59,7 @@ func Init(options Options) {
 		internal.SetTheme(theme)
 	}
 
-	internal.Init(options.WindowTitle, options.ShowBackground, pbc)
+	internal.Init(options.WindowTitle, options.ShowBackground, options.WindowOptions, pbc)
 
 	if os.Getenv("INPUT_CAPTURE") != "" {
 		mapping := InputLogger()
