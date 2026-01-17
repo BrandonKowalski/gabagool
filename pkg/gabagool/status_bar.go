@@ -264,8 +264,10 @@ func renderStatusBar(
 	// Icons render right-to-left (last icon closest to time)
 	for i := maxIcons - 1; i >= 0; i-- {
 		icon := options.Icons[i]
+		prevX := currentX
 		currentX = renderStatusBarIcon(renderer, font, icon, currentX, contentY, contentHeight)
-		if i > 0 {
+		// Only add spacing if icon was actually rendered
+		if currentX != prevX && i > 0 {
 			currentX -= iconSpacing
 		}
 	}
