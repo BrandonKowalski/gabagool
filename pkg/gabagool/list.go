@@ -96,13 +96,7 @@ type listController struct {
 	titleScrollData *internal.TextScrollData
 	textureCache    *internal.TextureCache
 
-	heldDirections struct {
-		up, down, left, right bool
-	}
-	lastRepeatTime time.Time
-	repeatDelay    time.Duration
-	repeatInterval time.Duration
-	hasRepeated    bool
+	directionalInput internal.DirectionalInput
 }
 
 func newListController(options ListOptions) *listController {
@@ -123,18 +117,16 @@ func newListController(options ListOptions) *listController {
 	}
 
 	return &listController{
-		Options:         options,
-		SelectedItems:   selectedItems,
-		MultiSelect:     options.StartInMultiSelectMode,
-		StartY:          20,
-		lastInputTime:   time.Now(),
-		helpOverlay:     helpOverlay,
-		itemScrollData:  make(map[int]*internal.TextScrollData),
-		titleScrollData: &internal.TextScrollData{},
-		textureCache:    internal.NewTextureCache(),
-		lastRepeatTime:  time.Now(),
-		repeatDelay:     150 * time.Millisecond,
-		repeatInterval:  50 * time.Millisecond,
+		Options:          options,
+		SelectedItems:    selectedItems,
+		MultiSelect:      options.StartInMultiSelectMode,
+		StartY:           20,
+		lastInputTime:    time.Now(),
+		helpOverlay:      helpOverlay,
+		itemScrollData:   make(map[int]*internal.TextScrollData),
+		titleScrollData:  &internal.TextScrollData{},
+		textureCache:     internal.NewTextureCache(),
+		directionalInput: internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 	}
 }
 
@@ -257,20 +249,7 @@ func (lc *listController) handleHelpInput(button constants.VirtualButton) {
 }
 
 func (lc *listController) handleInputEventRelease(inputEvent *internal.Event) {
-	switch inputEvent.Button {
-	case constants.VirtualButtonUp:
-		lc.heldDirections.up = false
-		lc.hasRepeated = false
-	case constants.VirtualButtonDown:
-		lc.heldDirections.down = false
-		lc.hasRepeated = false
-	case constants.VirtualButtonLeft:
-		lc.heldDirections.left = false
-		lc.hasRepeated = false
-	case constants.VirtualButtonRight:
-		lc.heldDirections.right = false
-		lc.hasRepeated = false
-	}
+	lc.directionalInput.SetHeld(inputEvent.Button, false)
 }
 
 func (lc *listController) isDirectionalInput(button constants.VirtualButton) bool {
@@ -283,30 +262,9 @@ func (lc *listController) handleNavigation(button constants.VirtualButton) bool 
 		return false
 	}
 
-	direction := ""
-	switch button {
-	case constants.VirtualButtonUp:
-		direction = "up"
-		lc.heldDirections.up = true
-		lc.heldDirections.down = false
-	case constants.VirtualButtonDown:
-		direction = "down"
-		lc.heldDirections.down = true
-		lc.heldDirections.up = false
-	case constants.VirtualButtonLeft:
-		direction = "left"
-		lc.heldDirections.left = true
-		lc.heldDirections.right = false
-	case constants.VirtualButtonRight:
-		direction = "right"
-		lc.heldDirections.right = true
-		lc.heldDirections.left = false
-	default:
-	}
-
-	if direction != "" {
-		lc.navigate(direction)
-		lc.lastRepeatTime = time.Now()
+	if lc.directionalInput.SetHeld(button, true) {
+		dir := lc.directionalInput.HeldDirection()
+		lc.navigate(dir.String())
 		return true
 	}
 	return false
@@ -644,33 +602,13 @@ func (lc *listController) scrollTo(index int) {
 }
 
 func (lc *listController) handleDirectionalRepeats() {
-	if len(lc.Options.Items) == 0 || (!lc.heldDirections.up && !lc.heldDirections.down && !lc.heldDirections.left && !lc.heldDirections.right) {
-		lc.lastRepeatTime = time.Now()
-		lc.hasRepeated = false
+	if len(lc.Options.Items) == 0 {
+		lc.directionalInput.Reset()
 		return
 	}
 
-	timeSince := time.Since(lc.lastRepeatTime)
-
-	// Use repeatDelay for first repeat, then repeatInterval for subsequent repeats
-	threshold := lc.repeatInterval
-	if !lc.hasRepeated {
-		threshold = lc.repeatDelay
-	}
-
-	if timeSince >= threshold {
-		lc.lastRepeatTime = time.Now()
-		lc.hasRepeated = true
-
-		if lc.heldDirections.up {
-			lc.navigate("up")
-		} else if lc.heldDirections.down {
-			lc.navigate("down")
-		} else if lc.heldDirections.left {
-			lc.navigate("left")
-		} else if lc.heldDirections.right {
-			lc.navigate("right")
-		}
+	if dir := lc.directionalInput.Update(); dir != internal.DirectionNone {
+		lc.navigate(dir.String())
 	}
 }
 
