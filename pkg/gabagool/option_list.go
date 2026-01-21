@@ -46,7 +46,7 @@ type OptionListSettings struct {
 	InitialSelectedIndex  int
 	VisibleStartIndex     int
 	DisableBackButton     bool
-	SmallTitle            bool
+	UseSmallTitle         bool
 	FooterHelpItems       []FooterHelpItem
 	HelpExitText          string
 	ActionButton          constants.VirtualButton
@@ -111,11 +111,11 @@ type internalOptionsListSettings struct {
 	Title                 string
 	TitleAlign            constants.TextAlign
 	TitleSpacing          int32
-	SmallTitle            bool
+	UseSmallTitle         bool
 	ScrollSpeed           float32
 	ScrollPauseTime       int
 	FooterHelpItems       []FooterHelpItem
-	FooterTextColor       sdl.Color
+	FooterColor           sdl.Color
 	DisableBackButton     bool
 	HelpExitText          string
 	ActionButton          constants.VirtualButton
@@ -156,7 +156,7 @@ func defaultOptionsListSettings(title string) internalOptionsListSettings {
 		TitleSpacing:    constants.DefaultTitleSpacing,
 		ScrollSpeed:     150.0,
 		ScrollPauseTime: 25,
-		FooterTextColor: sdl.Color{R: 180, G: 180, B: 180, A: 255},
+		FooterColor:     sdl.Color{R: 180, G: 180, B: 180, A: 255},
 		FooterHelpItems: []FooterHelpItem{},
 		ConfirmButton:   constants.VirtualButtonStart,
 		StatusBar:       DefaultStatusBarOptions(),
@@ -256,7 +256,7 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 	optionsListController.MaxVisibleItems = int(optionsListController.calculateMaxVisibleItems(window))
 	optionsListController.Settings.FooterHelpItems = listOptions.FooterHelpItems
 	optionsListController.Settings.DisableBackButton = listOptions.DisableBackButton
-	optionsListController.Settings.SmallTitle = listOptions.SmallTitle
+	optionsListController.Settings.UseSmallTitle = listOptions.UseSmallTitle
 	optionsListController.Settings.HelpExitText = listOptions.HelpExitText
 	optionsListController.Settings.ActionButton = listOptions.ActionButton
 	optionsListController.Settings.SecondaryActionButton = listOptions.SecondaryActionButton
@@ -359,7 +359,7 @@ func (olc *optionsListController) calculateMaxVisibleItems(window *internal.Wind
 
 	var titleHeight int32 = 0
 	if olc.Settings.Title != "" {
-		if olc.Settings.SmallTitle {
+		if olc.Settings.UseSmallTitle {
 			titleHeight = int32(float32(50) * scaleFactor)
 		} else {
 			titleHeight = int32(float32(60) * scaleFactor)
@@ -791,7 +791,7 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 	scaleFactor := internal.GetScaleFactor()
 	window := internal.GetWindow()
 	titleFont := internal.Fonts.ExtraLargeFont
-	if olc.Settings.SmallTitle {
+	if olc.Settings.UseSmallTitle {
 		titleFont = internal.Fonts.LargeFont
 	}
 	font := internal.Fonts.SmallFont

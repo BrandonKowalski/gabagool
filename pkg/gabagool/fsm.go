@@ -1,5 +1,31 @@
 package gabagool
 
+// Deprecated: The FSM (finite state machine) is deprecated and will be removed in a future version.
+// Use the router package instead, which provides explicit data flow and type-safe screen transitions.
+//
+// Migration example:
+//
+// Before (FSM):
+//
+//	fsm := gabagool.NewFSM()
+//	gabagool.AddState(fsm, "list", func(ctx *gabagool.Context) (ListResult, gabagool.ExitCode) {
+//	    // ...
+//	})
+//	fsm.Start("list").Run()
+//
+// After (Router):
+//
+//	r := router.New()
+//	r.Register(ScreenList, func(input any) (any, error) {
+//	    return listScreen(input.(ListInput)), nil
+//	})
+//	r.OnTransition(func(from router.Screen, result any, stack *router.Stack) (router.Screen, any) {
+//	    // centralized transition logic
+//	})
+//	r.Run(ScreenList, ListInput{...})
+//
+// See the router package documentation for complete examples.
+
 import (
 	"fmt"
 	"reflect"

@@ -31,8 +31,11 @@ func SetLogFilename(filename string) {
 
 func setup() {
 	setupOnce.Do(func() {
+		// Try to set up file logging, fall back to console-only on failure
 		if err := os.MkdirAll("logs", 0755); err != nil {
-			panic("Failed to create logs directory: " + err.Error())
+			// Can't create logs directory, fall back to console-only
+			multiWriter = os.Stdout
+			return
 		}
 
 		filename := logFilename
@@ -43,7 +46,9 @@ func setup() {
 		var err error
 		logFile, err = os.OpenFile(filepath.Join("logs", filename), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
-			panic("Failed to open log file: " + err.Error())
+			// Can't open log file, fall back to console-only
+			multiWriter = os.Stdout
+			return
 		}
 
 		multiWriter = io.MultiWriter(os.Stdout, logFile)

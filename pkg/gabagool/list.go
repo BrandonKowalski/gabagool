@@ -18,9 +18,9 @@ type ListOptions struct {
 	VisibleStartIndex int
 	MaxVisibleItems   int
 
-	EnableImages bool
+	ShowImages bool
 
-	StartInMultiSelectMode bool
+	InitialMultiSelectMode bool
 	DisableBackButton      bool
 
 	HelpTitle    string
@@ -29,11 +29,11 @@ type ListOptions struct {
 
 	Margins         internal.Padding
 	ItemSpacing     int32
-	SmallTitle      bool
+	UseSmallTitle   bool
 	TitleAlign      constants.TextAlign
 	TitleSpacing    int32
 	FooterText      string
-	FooterTextColor sdl.Color
+	FooterColor     sdl.Color
 	FooterHelpItems []FooterHelpItem
 	StatusBar       StatusBarOptions
 
@@ -65,7 +65,7 @@ func DefaultListOptions(title string, items []MenuItem) ListOptions {
 		Margins:               internal.UniformPadding(20),
 		TitleAlign:            constants.TextAlignLeft,
 		TitleSpacing:          constants.DefaultTitleSpacing,
-		FooterTextColor:       sdl.Color{R: 180, G: 180, B: 180, A: 255},
+		FooterColor:           sdl.Color{R: 180, G: 180, B: 180, A: 255},
 		ScrollSpeed:           4.0,
 		ScrollPauseTime:       1250,
 		InputDelay:            constants.DefaultInputDelay,
@@ -119,7 +119,7 @@ func newListController(options ListOptions) *listController {
 	return &listController{
 		Options:          options,
 		SelectedItems:    selectedItems,
-		MultiSelect:      options.StartInMultiSelectMode,
+		MultiSelect:      options.InitialMultiSelectMode,
 		StartY:           20,
 		lastInputTime:    time.Now(),
 		helpOverlay:      helpOverlay,
@@ -643,7 +643,7 @@ func (lc *listController) renderContent(window *internal.Window, visibleItems []
 
 	itemStartY := lc.StartY
 
-	if lc.Options.EnableImages && lc.Options.SelectedIndex < len(lc.Options.Items) {
+	if lc.Options.ShowImages && lc.Options.SelectedIndex < len(lc.Options.Items) {
 		selectedItem := lc.Options.Items[lc.Options.SelectedIndex]
 		if selectedItem.BackgroundFilename != "" {
 			lc.renderSelectedItemBackground(window, selectedItem.BackgroundFilename)
@@ -658,7 +658,7 @@ func (lc *listController) renderContent(window *internal.Window, visibleItems []
 
 	if lc.Options.Title != "" {
 		titleFont := internal.Fonts.ExtraLargeFont
-		if lc.Options.SmallTitle {
+		if lc.Options.UseSmallTitle {
 			titleFont = internal.Fonts.LargeFont
 		}
 		itemStartY = lc.renderScrollableTitle(renderer, titleFont, lc.Options.Title, lc.Options.TitleAlign, lc.StartY, lc.Options.Margins.Left+10, statusBarWidth) + lc.Options.TitleSpacing
@@ -687,7 +687,7 @@ func (lc *listController) renderContent(window *internal.Window, visibleItems []
 }
 
 func (lc *listController) imageIsDisplayed() bool {
-	if lc.Options.EnableImages && lc.Options.SelectedIndex < len(lc.Options.Items) {
+	if lc.Options.ShowImages && lc.Options.SelectedIndex < len(lc.Options.Items) {
 		selectedItem := lc.Options.Items[lc.Options.SelectedIndex]
 		if selectedItem.ImageFilename != "" {
 			return true
@@ -1042,7 +1042,7 @@ func (lc *listController) calculateMaxVisibleItems(window *internal.Window) int3
 
 	var titleHeight int32 = 0
 	if lc.Options.Title != "" {
-		if lc.Options.SmallTitle {
+		if lc.Options.UseSmallTitle {
 			titleHeight = int32(float32(50) * scaleFactor)
 		} else {
 			titleHeight = int32(float32(60) * scaleFactor)

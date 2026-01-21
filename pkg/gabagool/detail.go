@@ -49,7 +49,7 @@ type DetailScreenOptions struct {
 	MetadataColor       sdl.Color
 	DescriptionColor    sdl.Color
 	BackgroundColor     sdl.Color
-	EnableAction        bool
+	AllowAction         bool
 	ActionButton        constants.VirtualButton
 	ConfirmButton       constants.VirtualButton
 	MaxImageHeight      int32
@@ -124,7 +124,7 @@ func DefaultInfoScreenOptions() DetailScreenOptions {
 		ActionButton:     constants.VirtualButtonA,
 		ConfirmButton:    constants.VirtualButtonA,
 		ShowScrollbar:    true,
-		EnableAction:     false,
+		AllowAction:      false,
 	}
 }
 
@@ -443,7 +443,7 @@ func (s *detailScreenState) handleInputEvent(inputEvent *internal.Event) {
 		}
 	case constants.VirtualButtonY:
 		// Y button for action/options
-		if s.options.EnableAction && s.options.ActionButton == constants.VirtualButtonY {
+		if s.options.AllowAction && s.options.ActionButton == constants.VirtualButtonY {
 			s.result.Action = DetailActionTriggered
 		}
 	}

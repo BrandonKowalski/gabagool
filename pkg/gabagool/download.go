@@ -36,9 +36,9 @@ type DownloadResult struct {
 }
 
 type DownloadManagerOptions struct {
-	AutoContinue       bool
-	MaxConcurrent      int
-	InsecureSkipVerify bool
+	AutoContinueOnComplete bool
+	MaxConcurrent          int
+	SkipSSLVerification    bool
 }
 
 type downloadJob struct {
@@ -122,7 +122,7 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 	if opts.MaxConcurrent > 0 {
 		downloadManager.maxConcurrent = opts.MaxConcurrent
 	}
-	downloadManager.insecureSkipVerify = opts.InsecureSkipVerify
+	downloadManager.insecureSkipVerify = opts.SkipSSLVerification
 
 	result := DownloadResult{
 		Completed: []Download{},
@@ -198,7 +198,7 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 		if len(downloadManager.activeJobs) == 0 && len(downloadManager.downloadQueue) == 0 && !downloadManager.isAllComplete {
 			downloadManager.isAllComplete = true
 
-			if opts.AutoContinue && len(downloadManager.failedDownloads) == 0 {
+			if opts.AutoContinueOnComplete && len(downloadManager.failedDownloads) == 0 {
 				running = false
 			}
 		}
@@ -294,7 +294,7 @@ func (dm *downloadManager) cancelAllDownloads() {
 		close(job.cancelChan)
 		if !job.isComplete && !job.hasError {
 			job.hasError = true
-			job.error = fmt.Errorf("download cancelled by user")
+			job.error = ErrDownloadCancelled
 			dm.failedDownloads = append(dm.failedDownloads, job.download)
 			dm.errors = append(dm.errors, job.error)
 		}
@@ -302,7 +302,7 @@ func (dm *downloadManager) cancelAllDownloads() {
 
 	for _, job := range dm.downloadQueue {
 		job.hasError = true
-		job.error = fmt.Errorf("download cancelled by user")
+		job.error = ErrDownloadCancelled
 		dm.failedDownloads = append(dm.failedDownloads, job.download)
 		dm.errors = append(dm.errors, job.error)
 	}
@@ -420,7 +420,7 @@ func (dm *downloadManager) downloadFile(job *downloadJob) {
 		}
 	case <-job.cancelChan:
 		job.hasError = true
-		job.error = fmt.Errorf("download canceled")
+		job.error = ErrDownloadCancelled
 	}
 }
 

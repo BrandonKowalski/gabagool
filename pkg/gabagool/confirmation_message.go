@@ -22,38 +22,38 @@ type ConfirmationResult struct {
 }
 
 type confirmationMessageSettings struct {
-	Margins          internal.Padding
-	MessageText      string
-	MessageAlign     constants.TextAlign
-	ButtonSpacing    int32
-	ConfirmButton    constants.VirtualButton
-	CancelButton     constants.VirtualButton
-	ImagePath        string
-	MaxImageHeight   int32
-	MaxImageWidth    int32
-	BackgroundColor  sdl.Color
-	MessageTextColor sdl.Color
-	FooterText       string
-	FooterHelpItems  []FooterHelpItem
-	FooterTextColor  sdl.Color
-	InputDelay       time.Duration
-	StatusBar        StatusBarOptions
+	Margins         internal.Padding
+	MessageText     string
+	MessageAlign    constants.TextAlign
+	ButtonSpacing   int32
+	ConfirmButton   constants.VirtualButton
+	CancelButton    constants.VirtualButton
+	ImagePath       string
+	MaxImageHeight  int32
+	MaxImageWidth   int32
+	BackgroundColor sdl.Color
+	MessageColor    sdl.Color
+	FooterText      string
+	FooterHelpItems []FooterHelpItem
+	FooterColor     sdl.Color
+	InputDelay      time.Duration
+	StatusBar       StatusBarOptions
 }
 
 func defaultMessageSettings(message string) confirmationMessageSettings {
 	return confirmationMessageSettings{
-		Margins:          internal.UniformPadding(20),
-		MessageText:      message,
-		MessageAlign:     constants.TextAlignCenter,
-		ButtonSpacing:    20,
-		ConfirmButton:    constants.VirtualButtonA,
-		CancelButton:     constants.VirtualButtonB,
-		BackgroundColor:  sdl.Color{R: 0, G: 0, B: 0, A: 255},
-		MessageTextColor: sdl.Color{R: 255, G: 255, B: 255, A: 255},
-		FooterTextColor:  sdl.Color{R: 180, G: 180, B: 180, A: 255},
-		InputDelay:       constants.DefaultInputDelay,
-		FooterHelpItems:  []FooterHelpItem{},
-		StatusBar:        DefaultStatusBarOptions(),
+		Margins:         internal.UniformPadding(20),
+		MessageText:     message,
+		MessageAlign:    constants.TextAlignCenter,
+		ButtonSpacing:   20,
+		ConfirmButton:   constants.VirtualButtonA,
+		CancelButton:    constants.VirtualButtonB,
+		BackgroundColor: sdl.Color{R: 0, G: 0, B: 0, A: 255},
+		MessageColor:    sdl.Color{R: 255, G: 255, B: 255, A: 255},
+		FooterColor:     sdl.Color{R: 180, G: 180, B: 180, A: 255},
+		InputDelay:      constants.DefaultInputDelay,
+		FooterHelpItems: []FooterHelpItem{},
+		StatusBar:       DefaultStatusBarOptions(),
 	}
 }
 
@@ -210,7 +210,7 @@ func renderFrame(renderer *sdl.Renderer, window *internal.Window, settings confi
 			responsiveMaxWidth,
 			centerX,
 			startY,
-			settings.MessageTextColor,
+			settings.MessageColor,
 			constants.TextAlignCenter)
 	}
 

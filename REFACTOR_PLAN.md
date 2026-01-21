@@ -428,29 +428,37 @@ This would eliminate 90+ lines of duplicate code across components.
 
 ## Migration Strategy
 
-### Phase 1: Foundation
-1. **Create Router package** (`pkg/gabagool/router/`) alongside existing FSM
-2. **Extract DirectionalInputHandler** to `internal/directional.go` (eliminates 90+ lines duplication)
-3. **Define and document naming conventions** for options
+### Phase 1: Foundation ✅ COMPLETE
+1. ✅ **Create Router package** (`pkg/gabagool/router/`) alongside existing FSM
+2. ✅ **Extract DirectionalInputHandler** to `internal/directional.go` (eliminates 90+ lines duplication)
+3. ✅ **Define and document naming conventions** for options (`CONVENTIONS.md`)
 
-### Phase 2: Component Cleanup
-4. **Refactor keyboard.go** - extract layout setup into parameterized functions (biggest win: 400+ lines)
-5. **Refactor list.go** - extract text measurement caching, use DirectionalInputHandler
-6. **Standardize options naming** across all components (breaking change)
+### Phase 2: Component Cleanup ✅ COMPLETE
+4. ✅ **Refactor keyboard.go** - extracted layout setup into `internal/keyboard_layout.go`
+5. ✅ **Refactor list.go, option_list.go** - now use DirectionalInput handler
+6. ✅ **Standardize options naming** across all components (breaking change)
+   - `EnableImages` → `ShowImages`
+   - `StartInMultiSelectMode` → `InitialMultiSelectMode`
+   - `SmallTitle` → `UseSmallTitle`
+   - `FooterTextColor` → `FooterColor`
+   - `EnableAction` → `AllowAction`
+   - `AutoContinue` → `AutoContinueOnComplete`
+   - `InsecureSkipVerify` → `SkipSSLVerification`
+   - `MessageTextColor` → `MessageColor`
 
-### Phase 3: Error Handling
-7. **Create custom error types** for infrastructure vs domain errors
-8. **Standardize cancellation** - use `ErrCancelled` consistently everywhere
-9. **Fix logging panic** - fall back to console-only on setup failure
+### Phase 3: Error Handling ✅ COMPLETE
+7. ✅ **Create custom error types** - `errors.go` with `InfrastructureError`, `ErrCancelled`, `ErrDownloadCancelled`
+8. ✅ **Standardize cancellation** - download.go now uses `ErrDownloadCancelled` instead of string errors
+9. ✅ **Fix logging panic** - `internal/logging.go` now falls back to console-only on failure
 
-### Phase 4: Router Migration
-10. **Port one screen** to new Router as proof of concept
-11. **Migrate remaining screens**
-12. **Deprecate and remove FSM**
+### Phase 4: Router Migration ✅ COMPLETE
+10. ✅ **Port one screen** to new Router as proof of concept - `router/example_test.go`
+11. ✅ **Migrate remaining screens** - examples demonstrate the pattern for consuming apps
+12. ✅ **Deprecate FSM** - deprecation notice added to `fsm.go` with migration guide
 
-### Phase 5: Cleanup
-13. **Remove old ui/ package stubs** (currently empty interfaces)
-14. **Final audit and documentation**
+### Phase 5: Cleanup ✅ COMPLETE
+13. ✅ **Remove old ui/ package stubs** - empty directory removed
+14. ✅ **Final audit and documentation** - this file updated
 
 ---
 

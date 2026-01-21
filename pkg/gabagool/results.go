@@ -1,11 +1,5 @@
 package gabagool
 
-import "errors"
-
-var (
-	ErrCancelled = errors.New("operation cancelled by user")
-)
-
 type ListAction int
 
 const (
