@@ -1,8 +1,8 @@
 // Package router provides screen navigation with explicit data flow.
 //
-// Unlike the FSM package, router uses explicit input/output types for each screen
-// and a centralized transition function for all routing logic. This makes data
-// flow traceable and avoids hidden global state.
+// Router uses explicit input/output types for each screen and a centralized
+// transition function for all routing logic. This makes data flow traceable
+// and avoids hidden global state.
 //
 // # Basic Usage
 //

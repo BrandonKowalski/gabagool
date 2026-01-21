@@ -9,11 +9,12 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 )
 
+// MessageOptions configures the confirmation message dialog.
 type MessageOptions struct {
-	ImagePath     string
-	ConfirmButton constants.VirtualButton
-	CancelButton  constants.VirtualButton
-	StatusBar     StatusBarOptions
+	ImagePath     string                  // Optional image to display above the message
+	ConfirmButton constants.VirtualButton // Button to confirm (default: A)
+	CancelButton  constants.VirtualButton // Button to cancel (default: B)
+	StatusBar     StatusBarOptions        // Status icons configuration
 }
 
 // ConfirmationResult represents the result of a confirmation message.

@@ -11,16 +11,20 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+// buttonConfig pairs a virtual button with its display name for the input logger wizard.
 type buttonConfig struct {
 	internalButton constants.VirtualButton
 	displayName    string
 }
 
+// mappedInput stores the raw input code and its source type (keyboard, joystick, etc.).
 type mappedInput struct {
 	code   int
 	source internal.Source
 }
 
+// inputLoggerController manages the interactive input mapping wizard that guides
+// users through configuring each button on their controller.
 type inputLoggerController struct {
 	lastInput         string
 	lastButtonName    string
@@ -70,6 +74,9 @@ func newInputLogger() *inputLoggerController {
 	}
 }
 
+// InputLogger runs an interactive wizard that prompts the user to press each button
+// on their controller, building a custom input mapping. Returns the completed mapping
+// or nil if cancelled (ESC key). The mapping can be saved to JSON for later use.
 func InputLogger() *internal.InputMapping {
 	logger := newInputLogger()
 
@@ -94,20 +101,20 @@ func InputLogger() *internal.InputMapping {
 	return logger.buildMapping()
 }
 
+// handleEvent processes a single SDL event, mapping it to the current button if valid.
+// Returns false when all buttons are configured or the user cancels.
 func (il *inputLoggerController) handleEvent(event sdl.Event) bool {
 	il.mutex.Lock()
 	defer il.mutex.Unlock()
 
-	// Check if we're done with all buttons
 	if il.currentButtonIdx >= len(il.buttonSequence) {
 		internal.GetInternalLogger().Info("All buttons configured successfully",
 			"totalConfigured", len(il.mappedButtons))
 		return false
 	}
 
-	// Check debounce - if we're waiting for the button to be released or debounce time hasn't passed, ignore
+	// Debounce: wait for physical button release before accepting next input
 	if il.waitingForRelease {
-		// Wait for button release
 		switch e := event.(type) {
 		case *sdl.KeyboardEvent:
 			if e.State == sdl.RELEASED {
@@ -139,12 +146,11 @@ func (il *inputLoggerController) handleEvent(event sdl.Event) bool {
 	switch e := event.(type) {
 	case *sdl.KeyboardEvent:
 		if e.State == sdl.PRESSED {
-			// Exit on ESC key
 			if e.Keysym.Scancode == sdl.SCANCODE_ESCAPE {
 				internal.GetInternalLogger().Info("Input logger cancelled by user (ESC pressed)")
 				return false
 			}
-			// Store the KEYCODE (Sym), not the scancode
+			// Use keycode (Sym) not scancode for consistent cross-layout behavior
 			il.lastInput = fmt.Sprintf("Keyboard: %d", int(e.Keysym.Sym))
 			il.lastButtonName = "Registered!"
 			il.mappedButtons[currentButton.internalButton] = mappedInput{
@@ -190,7 +196,6 @@ func (il *inputLoggerController) handleEvent(event sdl.Event) bool {
 			il.advanceToNextButton()
 		}
 	case *sdl.JoyAxisEvent:
-		// Only log significant axis movements
 		if internal.Abs(int(e.Value)) > 16000 {
 			var source internal.Source
 			var direction string
@@ -233,7 +238,7 @@ func (il *inputLoggerController) handleEvent(event sdl.Event) bool {
 			il.lastInput = fmt.Sprintf("Hat Switch: %s (%d)", hatName, e.Value)
 			il.lastButtonName = "Registered!"
 			il.mappedButtons[currentButton.internalButton] = mappedInput{
-				code:   int(e.Value), // Store the hat VALUE (direction), not the hat index
+				code:   int(e.Value),
 				source: internal.SourceHatSwitch,
 			}
 			il.lastInputTime = time.Now()
@@ -255,6 +260,7 @@ func (il *inputLoggerController) advanceToNextButton() {
 	il.lastButtonName = ""
 }
 
+// render draws the current wizard state showing which button to press next.
 func (il *inputLoggerController) render() {
 	renderer := internal.GetWindow().Renderer
 
@@ -296,6 +302,8 @@ func (il *inputLoggerController) render() {
 	renderer.Present()
 }
 
+// buildMapping converts the collected button mappings into an InputMapping struct
+// that can be used by the input processor or saved to JSON.
 func (il *inputLoggerController) buildMapping() *internal.InputMapping {
 	il.mutex.Lock()
 	defer il.mutex.Unlock()
@@ -309,7 +317,6 @@ func (il *inputLoggerController) buildMapping() *internal.InputMapping {
 		JoystickHatMap:      make(map[uint8]constants.VirtualButton),
 	}
 
-	// Populate the mapping based on each button's individual source
 	for button, input := range il.mappedButtons {
 		switch input.source {
 		case internal.SourceKeyboard:

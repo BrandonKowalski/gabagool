@@ -10,14 +10,17 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 )
 
+// MappingPathEnvVar is the environment variable for custom input mapping file path.
 const MappingPathEnvVar = "INPUT_MAPPING_PATH"
 
 var inputMappingBytes []byte
 
+// SetInputMappingBytes sets the input mapping data from embedded JSON bytes.
 func SetInputMappingBytes(data []byte) {
 	inputMappingBytes = data
 }
 
+// Source identifies the physical input source for an event.
 type Source int
 
 const (
@@ -29,11 +32,12 @@ const (
 	SourceHatSwitch
 )
 
+// Event represents a processed input event with the mapped virtual button.
 type Event struct {
-	Button  constants.VirtualButton
-	Pressed bool
-	Source  Source
-	RawCode int
+	Button  constants.VirtualButton // The mapped virtual button
+	Pressed bool                    // true for press, false for release
+	Source  Source                  // The physical input source
+	RawCode int                     // The raw SDL code for the input
 }
 
 // ComboType distinguishes between chord and sequence combinations
@@ -69,24 +73,22 @@ type SequenceOptions struct {
 	OnTrigger ComboCallback // Called when the sequence is completed
 }
 
+// JoystickAxisMapping maps an analog axis to two virtual buttons based on direction.
 type JoystickAxisMapping struct {
-	PositiveButton constants.VirtualButton
-	NegativeButton constants.VirtualButton
-	Threshold      int16
+	PositiveButton constants.VirtualButton // Button for positive axis values (right/down)
+	NegativeButton constants.VirtualButton // Button for negative axis values (left/up)
+	Threshold      int16                   // Axis value threshold to trigger button press
 }
 
+// InputMapping defines the mapping from physical inputs to virtual buttons.
+// This allows the framework to work with different controller configurations.
 type InputMapping struct {
-	KeyboardMap map[sdl.Keycode]constants.VirtualButton
-
-	ControllerButtonMap map[sdl.GameControllerButton]constants.VirtualButton
-
-	ControllerHatMap map[uint8]constants.VirtualButton
-
-	JoystickAxisMap map[uint8]JoystickAxisMapping
-
-	JoystickButtonMap map[uint8]constants.VirtualButton
-
-	JoystickHatMap map[uint8]constants.VirtualButton
+	KeyboardMap         map[sdl.Keycode]constants.VirtualButton              // Keyboard key mappings
+	ControllerButtonMap map[sdl.GameControllerButton]constants.VirtualButton // SDL game controller button mappings
+	ControllerHatMap    map[uint8]constants.VirtualButton                    // D-pad/hat switch mappings (controller)
+	JoystickAxisMap     map[uint8]JoystickAxisMapping                        // Analog axis mappings
+	JoystickButtonMap   map[uint8]constants.VirtualButton                    // Raw joystick button mappings
+	JoystickHatMap      map[uint8]constants.VirtualButton                    // D-pad/hat switch mappings (joystick)
 }
 
 type Mapping struct {

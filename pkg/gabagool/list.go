@@ -11,51 +11,53 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+// ListOptions configures the behavior and appearance of a List component.
 type ListOptions struct {
-	Title             string
-	Items             []MenuItem
-	SelectedIndex     int
-	VisibleStartIndex int
-	MaxVisibleItems   int
+	Title             string     // Header text displayed at the top
+	Items             []MenuItem // Items to display in the list
+	SelectedIndex     int        // Initially selected item index
+	VisibleStartIndex int        // First visible item index (for scroll position restoration)
+	MaxVisibleItems   int        // Maximum items visible at once (auto-calculated if 0)
 
-	ShowImages bool
+	ShowImages bool // Display item images on the right side
 
-	InitialMultiSelectMode bool
-	DisableBackButton      bool
+	InitialMultiSelectMode bool // Start in multi-select mode
+	DisableBackButton      bool // Prevent B button from closing the list
 
-	HelpTitle    string
-	HelpText     []string
-	HelpExitText string
+	HelpTitle    string   // Title for the help overlay
+	HelpText     []string // Lines of help text
+	HelpExitText string   // Text shown at bottom of help overlay
 
-	Margins         internal.Padding
-	ItemSpacing     int32
-	UseSmallTitle   bool
-	TitleAlign      constants.TextAlign
-	TitleSpacing    int32
-	FooterText      string
-	FooterColor     sdl.Color
-	FooterHelpItems []FooterHelpItem
-	StatusBar       StatusBarOptions
+	Margins         internal.Padding    // Screen edge margins
+	ItemSpacing     int32               // Vertical spacing between items
+	UseSmallTitle   bool                // Use smaller font for title
+	TitleAlign      constants.TextAlign // Title text alignment
+	TitleSpacing    int32               // Space between title and list items
+	FooterText      string              // Deprecated: use FooterHelpItems
+	FooterColor     sdl.Color           // Footer text color
+	FooterHelpItems []FooterHelpItem    // Button hints shown in footer
+	StatusBar       StatusBarOptions    // Status icons in top-right corner
 
-	ScrollSpeed     float32
-	ScrollPauseTime int
+	ScrollSpeed     float32 // Pixels per frame for text scrolling
+	ScrollPauseTime int     // Milliseconds to pause at scroll boundaries
 
-	InputDelay            time.Duration
-	MultiSelectButton     constants.VirtualButton
-	ReorderButton         constants.VirtualButton
-	ActionButton          constants.VirtualButton
-	SecondaryActionButton constants.VirtualButton
-	HelpButton            constants.VirtualButton
-	SelectAllButton       constants.VirtualButton
-	DeselectAllButton     constants.VirtualButton
+	InputDelay            time.Duration           // Debounce delay between inputs
+	MultiSelectButton     constants.VirtualButton // Button to toggle multi-select mode
+	ReorderButton         constants.VirtualButton // Button to enter reorder mode
+	ActionButton          constants.VirtualButton // Primary action button (triggers ListActionTriggered)
+	SecondaryActionButton constants.VirtualButton // Secondary action (triggers ListActionSecondaryTriggered)
+	HelpButton            constants.VirtualButton // Button to show help overlay
+	SelectAllButton       constants.VirtualButton // Button to select all items
+	DeselectAllButton     constants.VirtualButton // Button to deselect all items
 
-	EmptyMessage      string
-	EmptyMessageColor sdl.Color
+	EmptyMessage      string    // Message shown when Items is empty
+	EmptyMessageColor sdl.Color // Color for empty message
 
-	OnSelect  func(index int, item *MenuItem)
-	OnReorder func(from, to int)
+	OnSelect  func(index int, item *MenuItem) // Called when selection changes
+	OnReorder func(from, to int)              // Called when items are reordered
 }
 
+// DefaultListOptions returns a ListOptions with sensible defaults for the given title and items.
 func DefaultListOptions(title string, items []MenuItem) ListOptions {
 	return ListOptions{
 		Title:                 title,
@@ -136,6 +138,8 @@ func (lc *listController) cleanup() {
 	}
 }
 
+// List displays a scrollable, selectable list of items with optional multi-select and reorder modes.
+// Returns the selected items and the action that was taken. Returns ErrCancelled if the user backs out.
 func List(options ListOptions) (*ListResult, error) {
 	window := internal.GetWindow()
 	renderer := window.Renderer

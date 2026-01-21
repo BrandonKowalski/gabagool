@@ -1,5 +1,7 @@
 package nextui
 
+// NextVal represents the NextUI system configuration loaded from nextval.elf.
+// This structure matches the JSON output from the NextUI configuration utility.
 type NextVal struct {
 	Font            int    `json:"font"`
 	Color1          string `json:"color1"`

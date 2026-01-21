@@ -16,11 +16,12 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 )
 
+// Download represents a single file to download.
 type Download struct {
-	URL         string
-	Location    string
-	DisplayName string
-	Timeout     time.Duration
+	URL         string        // URL to download from
+	Location    string        // Local file path to save to
+	DisplayName string        // Optional display name (uses filename if empty)
+	Timeout     time.Duration // Request timeout (default: 120 minutes)
 }
 
 // DownloadError represents a failed download with its error.
@@ -35,10 +36,11 @@ type DownloadResult struct {
 	Failed    []DownloadError
 }
 
+// DownloadManagerOptions configures the download manager behavior.
 type DownloadManagerOptions struct {
-	AutoContinueOnComplete bool
-	MaxConcurrent          int
-	SkipSSLVerification    bool
+	AutoContinueOnComplete bool // Exit automatically when all downloads complete without errors
+	MaxConcurrent          int  // Maximum concurrent downloads (default: 3)
+	SkipSSLVerification    bool // Bypass SSL certificate validation (for self-signed certs)
 }
 
 type downloadJob struct {
