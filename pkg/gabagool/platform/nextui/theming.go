@@ -1,3 +1,6 @@
+// Package nextui provides theming and configuration support for the NextUI custom firmware.
+// NextUI is a CFW for the Trimui Smart Pro (tg5040) handheld gaming device.
+// Theme colors are loaded from the system's nextval configuration utility.
 package nextui
 
 import (
@@ -13,6 +16,7 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 )
 
+// Default theme used when nextval configuration cannot be loaded.
 var defaultTheme = internal.Theme{
 	HighlightColor:       internal.HexToColor(0xFFFFFF),
 	AccentColor:          internal.HexToColor(0x9B2257),
@@ -25,6 +29,8 @@ var defaultTheme = internal.Theme{
 	BackgroundImagePath:  "/mnt/SDCARD/bg.png",
 }
 
+// InitNextUITheme loads the NextUI theme from the system's nextval configuration.
+// Falls back to default theme if configuration cannot be loaded.
 func InitNextUITheme() internal.Theme {
 	var nv *NextVal
 	var err error

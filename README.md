@@ -1,20 +1,32 @@
+<!-- trunk-ignore-all(markdownlint/MD033) -->
+<!-- trunk-ignore(markdownlint/MD041) -->
+<div align="center">
+
 # gabagool
 
 A Go-based UI library for building graphical interfaces on retro gaming handhelds that support SDL2.
 
 ![Bring it here](./.github/resources/gabagool.gif)
+
 > 🇮🇹 (Chase, Grey, & HBO Home Entertainment, 1999–2007) 🇮🇹
+
+[![license-badge-img]][license-badge]
+[![godoc-badge-img]][godoc-badge]
+[![stars-badge-img]][stars-badge]
+
+</div>
 
 ---
 
 ## Features
 
-- **Type-safe FSM navigation** - Context-based finite state machine for multiscreen flows
+- **Router-based navigation** - Type-safe screen transitions with explicit data flow
 - **Rich UI components** - Lists, keyboards, dialogs, detail screens, and more
 - **Advanced input handling** - Chord/sequence detection, configurable button mapping
 - **Thread-safe updates** - Atomic operations for progress bars, status text, visibility
 - **Responsive design** - Automatic scaling based on screen resolution
 - **Image support** - PNG, JPEG, and SVG rendering with scaling
+- **Platform support** - NextUI and Cannoli CFW theming integration
 
 ---
 
@@ -25,7 +37,13 @@ A Go-based UI library for building graphical interfaces on retro gaming handheld
 #### macOS (Homebrew)
 
 ```bash
-brew install sdl2 sdl2_image sdl2_ttf
+brew install sdl2 sdl2_image sdl2_ttf sdl2_gfx
+```
+
+#### Linux (Debian/Ubuntu)
+
+```bash
+sudo apt-get install libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-gfx-dev
 ```
 
 ### Install the package
@@ -41,30 +59,32 @@ go get github.com/BrandonKowalski/gabagool/v2
 ```go
 package main
 
-import "github.com/BrandonKowalski/gabagool/v2"
+import (
+	gaba "github.com/BrandonKowalski/gabagool/v2/pkg/gabagool"
+)
 
 func main() {
-	gabagool.Init(gabagool.Options{
+	gaba.Init(gaba.Options{
 		WindowTitle:    "My App",
 		ShowBackground: true,
-		IsNextUI:       true,
+		IsNextUI:       true, // or IsCannoli: true
 	})
-	defer gabagool.Close()
+	defer gaba.Close()
 
-	// Create a simple list
-	list := gabagool.NewList(gabagool.ListOptions{
-		Title: "Main Menu",
-		Items: []gabagool.ListItem{
-			{Label: "Option 1"},
-			{Label: "Option 2"},
-			{Label: "Option 3"},
-		},
-	})
+	// Display a simple list
+	result, err := gaba.List(gaba.DefaultListOptions("Main Menu", []gaba.MenuItem{
+		{Text: "Option 1"},
+		{Text: "Option 2"},
+		{Text: "Option 3"},
+	}))
 
-	// Run the FSM
-	fsm := gabagool.NewFSM()
-	fsm.AddNode("main", list)
-	fsm.Run("main")
+	if err == gaba.ErrCancelled {
+		// User pressed back
+		return
+	}
+
+	// result.SelectedIndex contains the selected item
+	_ = result
 }
 ```
 
@@ -116,20 +136,119 @@ Top-right display for clock, battery, WiFi, and custom icons.
 
 ## Input System
 
-Gabagool abstracts physical controller inputs into virtual buttons. 
+Gabagool abstracts physical controller inputs into virtual buttons, allowing the same code to work across different devices.
 
-This can be controlled by mapping files.
+### Custom Input Mapping
+
+Load a custom mapping from JSON:
+
+```go
+// From embedded bytes
+gaba.SetInputMappingBytes(mappingJSON)
+
+// Or via environment variable
+// INPUT_MAPPING_PATH=/path/to/mapping.json
+```
 
 ### Button Combos
 
+Register chord (simultaneous) or sequence (ordered) button combinations:
+
 ```go
+import (
+	gaba "github.com/BrandonKowalski/gabagool/v2/pkg/gabagool"
+	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
+)
+
 // Chord: buttons pressed simultaneously
-processor.AddChord([]constants.VirtualButton{constants.L1, constants.R1}, func () {
-// triggered when L1+R1 pressed together
+gaba.RegisterChord("quick_menu", []constants.VirtualButton{
+	constants.VirtualButtonL1,
+	constants.VirtualButtonR1,
+}, gaba.ChordOptions{
+	OnTrigger: func() {
+		// triggered when L1+R1 pressed together
+	},
 })
 
-// Sequence: buttons pressed in order
-processor.AddSequence([]constants.VirtualButton{constants.A, constants.B, constants.A}, func () {
-// triggered after A -> B -> A sequence
+// Sequence: buttons pressed in order (like Konami code)
+gaba.RegisterSequence("secret", []constants.VirtualButton{
+	constants.VirtualButtonUp,
+	constants.VirtualButtonUp,
+	constants.VirtualButtonDown,
+	constants.VirtualButtonDown,
+}, gaba.SequenceOptions{
+	OnTrigger: func() {
+		// triggered after sequence completes
+	},
 })
 ```
+
+---
+
+## Multi-Screen Navigation
+
+For apps with multiple screens, use the `router` package for type-safe navigation with explicit data flow:
+
+```go
+import (
+	gaba "github.com/BrandonKowalski/gabagool/v2/pkg/gabagool"
+	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/router"
+)
+
+// Define screen identifiers
+const (
+	ScreenList router.Screen = iota
+	ScreenDetail
+)
+
+func main() {
+	gaba.Init(gaba.Options{WindowTitle: "My App", IsNextUI: true})
+	defer gaba.Close()
+
+	r := router.New()
+
+	// Register screen handlers
+	r.Register(ScreenList, func(input any) (any, error) {
+		return showList(input.(ListInput)), nil
+	})
+
+	r.Register(ScreenDetail, func(input any) (any, error) {
+		return showDetail(input.(DetailInput)), nil
+	})
+
+	// Define navigation transitions
+	r.OnTransition(func(from router.Screen, result any, stack *router.Stack) (router.Screen, any) {
+		switch from {
+		case ScreenList:
+			r := result.(ListResult)
+			if r.Action == ActionSelected {
+				stack.Push(from, input, r.Resume) // Save for back navigation
+				return ScreenDetail, DetailInput{Item: r.Selected}
+			}
+		case ScreenDetail:
+			// Pop returns to previous screen with resume state
+			entry := stack.Pop()
+			return entry.Screen, entry.Input
+		}
+		return router.ScreenExit, nil
+	})
+
+	r.Run(ScreenList, ListInput{})
+}
+```
+
+See the `router` package documentation for complete examples.
+
+<!-- Badges - Italian flag colors: Green (#009246), White (#F4F5F0), Red (#CE2B37) -->
+
+[license-badge-img]: https://img.shields.io/github/license/BrandonKowalski/gabagool?style=for-the-badge&color=009246
+
+[license-badge]: LICENSE
+
+[godoc-badge-img]: https://img.shields.io/badge/godoc-reference-F4F5F0?style=for-the-badge
+
+[godoc-badge]: https://pkg.go.dev/github.com/BrandonKowalski/gabagool/v2
+
+[stars-badge-img]: https://img.shields.io/github/stars/BrandonKowalski/gabagool?style=for-the-badge&color=CE2B37
+
+[stars-badge]: https://github.com/BrandonKowalski/gabagool/stargazers

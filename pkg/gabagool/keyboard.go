@@ -83,13 +83,7 @@ type virtualKeyboard struct {
 	urlShortcuts     []URLShortcut
 	StatusBar        StatusBarOptions
 
-	heldDirections struct {
-		up, down, left, right bool
-	}
-	lastRepeatTime time.Time
-	repeatDelay    time.Duration
-	repeatInterval time.Duration
-	hasRepeated    bool
+	directionalInput internal.DirectionalInput
 }
 
 var defaultKeyboardHelpLines = []string{
@@ -172,9 +166,7 @@ func createKeyboard(windowWidth, windowHeight int32, helpExitText string, layout
 		ShowingHelp:      false,
 		InputDelay:       100 * time.Millisecond,
 		lastInputTime:    time.Now(),
-		lastRepeatTime:   time.Now(),
-		repeatDelay:      150 * time.Millisecond,
-		repeatInterval:   50 * time.Millisecond,
+		directionalInput: internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 		StatusBar:        DefaultStatusBarOptions(),
 	}
 
@@ -215,9 +207,7 @@ func createURLKeyboard(windowWidth, windowHeight int32, helpExitText string, sho
 		ShowingHelp:      false,
 		InputDelay:       100 * time.Millisecond,
 		lastInputTime:    time.Now(),
-		lastRepeatTime:   time.Now(),
-		repeatDelay:      150 * time.Millisecond,
-		repeatInterval:   50 * time.Millisecond,
+		directionalInput: internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 		urlShortcuts:     shortcuts,
 		StatusBar:        DefaultStatusBarOptions(),
 	}
@@ -237,53 +227,53 @@ func createURLKeyboard(windowWidth, windowHeight int32, helpExitText string, sho
 	return kb
 }
 
+// populateLetterKeys fills keys array with letter keys at the given offset.
+// If symbols is nil, the letter itself is used as the symbol value.
+func populateLetterKeys(keys []key, letters string, offset int, symbols []string) {
+	for i, char := range letters {
+		symbolVal := string(char)
+		if symbols != nil && i < len(symbols) {
+			symbolVal = symbols[i]
+		}
+		keys[offset+i] = key{
+			LowerValue:  string(char),
+			UpperValue:  string(char - 32),
+			SymbolValue: symbolVal,
+		}
+	}
+}
+
+// populateCharKeys fills keys array with character keys (no case conversion).
+func populateCharKeys(keys []key, chars, symbols []string, offset int) {
+	for i, char := range chars {
+		symbolVal := char
+		if i < len(symbols) {
+			symbolVal = symbols[i]
+		}
+		keys[offset+i] = key{
+			LowerValue:  char,
+			UpperValue:  char,
+			SymbolValue: symbolVal,
+		}
+	}
+}
+
 func createKeys() []key {
-	keys := make([]key, 36) // Total number of regular keys
+	keys := make([]key, 36)
 
 	// Numbers row
 	numbers := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}
 	numberSymbols := []string{"!", "@", "#", "$", "%", "^", "&", "*", "(", ")"}
+	populateCharKeys(keys, numbers, numberSymbols, 0)
 
-	for i, num := range numbers {
-		keys[i] = key{
-			LowerValue:  num,
-			UpperValue:  num,
-			SymbolValue: numberSymbols[i],
-		}
-	}
-
-	// QWERTY row
-	qwerty := "qwertyuiop"
+	// Letter rows with custom symbols
 	qwertySymbols := []string{"`", "~", "[", "]", "\\", "|", "{", "}", ";", ":"}
-	for i, char := range qwerty {
-		keys[10+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: qwertySymbols[i],
-		}
-	}
-
-	// ASDF row
-	asdf := "asdfghjkl"
 	asdfSymbols := []string{"'", "\"", "<", ">", "?", "/", "+", "=", "_"}
-	for i, char := range asdf {
-		keys[20+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: asdfSymbols[i],
-		}
-	}
-
-	// ZXCV row - avoiding symbols already used
-	zxcv := "zxcvbnm"
 	zxcvSymbols := []string{",", ".", "-", "€", "£", "¥", "¢"}
-	for i, char := range zxcv {
-		keys[29+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: zxcvSymbols[i],
-		}
-	}
+
+	populateLetterKeys(keys, "qwertyuiop", 10, qwertySymbols)
+	populateLetterKeys(keys, "asdfghjkl", 20, asdfSymbols)
+	populateLetterKeys(keys, "zxcvbnm", 29, zxcvSymbols)
 
 	return keys
 }
@@ -311,54 +301,17 @@ func createURLKeys() []key {
 	// URL shortcuts (keys 0-4)
 	shortcuts := []string{"www.", ".com", ".org", ".net", ".io"}
 	shortcutSymbols := []string{".co", ".tv", ".me", ".uk", ".gg"}
-	for i, shortcut := range shortcuts {
-		keys[i] = key{
-			LowerValue:  shortcut,
-			UpperValue:  shortcut,
-			SymbolValue: shortcutSymbols[i],
-		}
-	}
+	populateCharKeys(keys, shortcuts, shortcutSymbols, 0)
 
 	// URL special characters (keys 5-14)
 	urlChars := []string{"/", ":", "@", "-", "_", ".", "~", "?", "#", "&"}
 	urlSymbols := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
-	for i, char := range urlChars {
-		keys[5+i] = key{
-			LowerValue:  char,
-			UpperValue:  char,
-			SymbolValue: urlSymbols[i],
-		}
-	}
+	populateCharKeys(keys, urlChars, urlSymbols, 5)
 
-	// QWERTY row (keys 15-24)
-	qwerty := "qwertyuiop"
-	for i, char := range qwerty {
-		keys[15+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: string(char),
-		}
-	}
-
-	// ASDF row (keys 25-33)
-	asdf := "asdfghjkl"
-	for i, char := range asdf {
-		keys[25+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: string(char),
-		}
-	}
-
-	// ZXCV row (keys 34-40)
-	zxcv := "zxcvbnm"
-	for i, char := range zxcv {
-		keys[34+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: string(char),
-		}
-	}
+	// Letter rows (no custom symbols for URL keyboard)
+	populateLetterKeys(keys, "qwertyuiop", 15, nil)
+	populateLetterKeys(keys, "asdfghjkl", 25, nil)
+	populateLetterKeys(keys, "zxcvbnm", 34, nil)
 
 	return keys
 }
@@ -403,56 +356,23 @@ func createURLKeysWithShortcuts5(shortcuts []URLShortcut) []key {
 	keys := make([]key, 41)
 
 	// URL shortcuts (keys 0-4)
-	for i := 0; i < 5; i++ {
-		if i < len(shortcuts) {
-			keys[i] = key{
-				LowerValue:  shortcuts[i].Value,
-				UpperValue:  shortcuts[i].Value,
-				SymbolValue: shortcuts[i].SymbolValue,
-			}
+	for i := 0; i < 5 && i < len(shortcuts); i++ {
+		keys[i] = key{
+			LowerValue:  shortcuts[i].Value,
+			UpperValue:  shortcuts[i].Value,
+			SymbolValue: shortcuts[i].SymbolValue,
 		}
 	}
 
 	// URL special characters (keys 5-14)
 	urlChars := []string{"/", ":", "@", "-", "_", ".", "~", "?", "#", "&"}
 	urlSymbols := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
-	for i, char := range urlChars {
-		keys[5+i] = key{
-			LowerValue:  char,
-			UpperValue:  char,
-			SymbolValue: urlSymbols[i],
-		}
-	}
+	populateCharKeys(keys, urlChars, urlSymbols, 5)
 
-	// QWERTY row (keys 15-24)
-	qwerty := "qwertyuiop"
-	for i, char := range qwerty {
-		keys[15+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: string(char),
-		}
-	}
-
-	// ASDF row (keys 25-33)
-	asdf := "asdfghjkl"
-	for i, char := range asdf {
-		keys[25+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: string(char),
-		}
-	}
-
-	// ZXCV row (keys 34-40)
-	zxcv := "zxcvbnm"
-	for i, char := range zxcv {
-		keys[34+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: string(char),
-		}
-	}
+	// Letter rows
+	populateLetterKeys(keys, "qwertyuiop", 15, nil)
+	populateLetterKeys(keys, "asdfghjkl", 25, nil)
+	populateLetterKeys(keys, "zxcvbnm", 34, nil)
 
 	return keys
 }
@@ -461,57 +381,23 @@ func createURLKeysWithShortcuts10(shortcuts []URLShortcut) []key {
 	keys := make([]key, 46)
 
 	// URL shortcuts (keys 0-9)
-	for i, shortcut := range shortcuts {
-		if i >= 10 {
-			break
-		}
+	for i := 0; i < 10 && i < len(shortcuts); i++ {
 		keys[i] = key{
-			LowerValue:  shortcut.Value,
-			UpperValue:  shortcut.Value,
-			SymbolValue: shortcut.SymbolValue,
+			LowerValue:  shortcuts[i].Value,
+			UpperValue:  shortcuts[i].Value,
+			SymbolValue: shortcuts[i].SymbolValue,
 		}
 	}
 
 	// URL special characters (keys 10-19)
 	urlChars := []string{"/", ":", "@", "-", "_", ".", "~", "?", "#", "&"}
 	urlSymbols := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
-	for i, char := range urlChars {
-		keys[10+i] = key{
-			LowerValue:  char,
-			UpperValue:  char,
-			SymbolValue: urlSymbols[i],
-		}
-	}
+	populateCharKeys(keys, urlChars, urlSymbols, 10)
 
-	// QWERTY row (keys 20-29)
-	qwerty := "qwertyuiop"
-	for i, char := range qwerty {
-		keys[20+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: string(char),
-		}
-	}
-
-	// ASDF row (keys 30-38)
-	asdf := "asdfghjkl"
-	for i, char := range asdf {
-		keys[30+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: string(char),
-		}
-	}
-
-	// ZXCV row (keys 39-45)
-	zxcv := "zxcvbnm"
-	for i, char := range zxcv {
-		keys[39+i] = key{
-			LowerValue:  string(char),
-			UpperValue:  string(char - 32),
-			SymbolValue: string(char),
-		}
-	}
+	// Letter rows
+	populateLetterKeys(keys, "qwertyuiop", 20, nil)
+	populateLetterKeys(keys, "asdfghjkl", 30, nil)
+	populateLetterKeys(keys, "zxcvbnm", 39, nil)
 
 	return keys
 }
@@ -548,56 +434,25 @@ func createNumericKeys() []key {
 }
 
 func setupKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
-	keyboardWidth := (windowWidth * 85) / 100
-	keyboardHeight := (windowHeight * 85) / 100
-	textInputHeight := windowHeight / 10
-	keyboardHeight = keyboardHeight - textInputHeight - 20
-	startX := (windowWidth - keyboardWidth) / 2
-	textInputY := (windowHeight - keyboardHeight - textInputHeight - 20) / 2
-	keyboardStartY := textInputY + textInputHeight + 20
+	dims := internal.CalculateKeyboardDimensions(windowWidth, windowHeight)
+	kb.KeyboardRect = dims.KeyboardRect()
+	kb.TextInputRect = dims.TextInputRect()
 
-	kb.KeyboardRect = sdl.Rect{X: startX, Y: keyboardStartY, W: keyboardWidth, H: keyboardHeight}
-	kb.TextInputRect = sdl.Rect{X: startX, Y: textInputY, W: keyboardWidth, H: textInputHeight}
+	sizes := internal.CalculateKeySizes(dims, 6)
+	keyWidth := sizes.KeyWidth
+	keyHeight := sizes.KeyHeight
+	keySpacing := sizes.KeySpacing
 
-	keyWidth := keyboardWidth / 12
-	keyHeight := keyboardHeight / 6
-	keySpacing := int32(3)
+	// Calculate row widths for centering
+	row1Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, sizes.BackspaceWidth)
+	row2Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
+	row3Width := internal.CalculateRowWidth(9, keyWidth, keySpacing, 0, sizes.EnterWidth)
+	row4Width := internal.CalculateRowWidth(7, keyWidth, keySpacing, sizes.ShiftWidth, sizes.SymbolWidth)
+	row5Width := sizes.SpaceWidth
 
-	// Define consistent key widths for special keys
-	backspaceWidth := keyWidth * 2
-	shiftWidth := keyWidth * 2
-	symbolWidth := keyWidth * 2
-	enterWidth := keyWidth + keyWidth/2
-	spaceWidth := keyWidth * 8
-
-	// Calculate the maximum row width to determine a consistent left margin
-	// Row 1: 10 regular keys + backspace
-	row1Width := keyWidth*10 + keySpacing*9 + backspaceWidth + keySpacing
-	// Row 2: 10 regular keys
-	row2Width := keyWidth*10 + keySpacing*9
-	// Row 3: 9 regular keys + enter
-	row3Width := keyWidth*9 + keySpacing*8 + enterWidth + keySpacing
-	// Row 4: shift + 7 regular keys + symbol
-	row4Width := shiftWidth + keySpacing + keyWidth*7 + keySpacing*6 + symbolWidth + keySpacing
-	// Row 5: space
-	row5Width := spaceWidth
-
-	// Find the maximum width to align all rows consistently
-	maxRowWidth := row1Width
-	if row2Width > maxRowWidth {
-		maxRowWidth = row2Width
-	}
-	if row3Width > maxRowWidth {
-		maxRowWidth = row3Width
-	}
-	if row4Width > maxRowWidth {
-		maxRowWidth = row4Width
-	}
-
-	// Calculate a consistent left margin for all rows
-	leftMargin := startX + (keyboardWidth-maxRowWidth)/2
-
-	y := keyboardStartY + keySpacing
+	maxRowWidth := internal.MaxRowWidth(row1Width, row2Width, row3Width, row4Width, row5Width)
+	leftMargin := dims.StartX + (dims.KeyboardWidth-maxRowWidth)/2
+	y := dims.KeyboardStartY + keySpacing
 
 	// Row 1: Numbers + Backspace
 	x := leftMargin
@@ -605,11 +460,11 @@ func setupKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
 		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 		x += keyWidth + keySpacing
 	}
-	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: backspaceWidth, H: keyHeight}
+	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: sizes.BackspaceWidth, H: keyHeight}
 
 	// Row 2: QWERTY
 	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row2Width)/2 // Center this row within max width
+	x = leftMargin + (maxRowWidth-row2Width)/2
 	for i := 10; i < 20; i++ {
 		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 		x += keyWidth + keySpacing
@@ -617,93 +472,58 @@ func setupKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
 
 	// Row 3: ASDF + Enter
 	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row3Width)/2 // Center this row within max width
+	x = leftMargin + (maxRowWidth-row3Width)/2
 	for i := 20; i < 29; i++ {
 		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 		x += keyWidth + keySpacing
 	}
-	kb.EnterRect = sdl.Rect{X: x, Y: y, W: enterWidth, H: keyHeight}
+	kb.EnterRect = sdl.Rect{X: x, Y: y, W: sizes.EnterWidth, H: keyHeight}
 
 	// Row 4: Shift + ZXCV + Symbol
 	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row4Width)/2 // Center this row within max width
-
-	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: shiftWidth, H: keyHeight}
-	x += shiftWidth + keySpacing
-
+	x = leftMargin + (maxRowWidth-row4Width)/2
+	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: sizes.ShiftWidth, H: keyHeight}
+	x += sizes.ShiftWidth + keySpacing
 	for i := 29; i < 36; i++ {
 		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 		x += keyWidth + keySpacing
 	}
-
-	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: symbolWidth, H: keyHeight}
+	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: sizes.SymbolWidth, H: keyHeight}
 
 	// Row 5: Space
 	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row5Width)/2 // Center space bar within max width
-	kb.SpaceRect = sdl.Rect{X: x, Y: y, W: spaceWidth, H: keyHeight}
+	x = leftMargin + (maxRowWidth-row5Width)/2
+	kb.SpaceRect = sdl.Rect{X: x, Y: y, W: sizes.SpaceWidth, H: keyHeight}
 }
 
 func setupURLKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
-	keyboardWidth := (windowWidth * 85) / 100
-	keyboardHeight := (windowHeight * 85) / 100
-	textInputHeight := windowHeight / 10
-	keyboardHeight = keyboardHeight - textInputHeight - 20
-	startX := (windowWidth - keyboardWidth) / 2
-	textInputY := (windowHeight - keyboardHeight - textInputHeight - 20) / 2
-	keyboardStartY := textInputY + textInputHeight + 20
+	dims := internal.CalculateKeyboardDimensions(windowWidth, windowHeight)
+	kb.KeyboardRect = dims.KeyboardRect()
+	kb.TextInputRect = dims.TextInputRect()
 
-	kb.KeyboardRect = sdl.Rect{X: startX, Y: keyboardStartY, W: keyboardWidth, H: keyboardHeight}
-	kb.TextInputRect = sdl.Rect{X: startX, Y: textInputY, W: keyboardWidth, H: textInputHeight}
+	sizes := internal.CalculateKeySizes(dims, 6)
+	keyWidth := sizes.KeyWidth
+	keyHeight := sizes.KeyHeight
+	keySpacing := sizes.KeySpacing
 
-	keyWidth := keyboardWidth / 12
-	keyHeight := keyboardHeight / 6
-	keySpacing := int32(3)
+	// Calculate row widths
+	row1Width := internal.CalculateRowWidth(5, sizes.ShortcutWidth, keySpacing, 0, sizes.BackspaceWidth)
+	row2Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
+	row3Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
+	row4Width := internal.CalculateRowWidth(9, keyWidth, keySpacing, 0, sizes.EnterWidth)
+	row5Width := internal.CalculateRowWidth(7, keyWidth, keySpacing, sizes.ShiftWidth, sizes.SymbolWidth)
 
-	// Shortcut keys are wider to fit text like "www." and ".com"
-	shortcutWidth := keyWidth * 2
-	backspaceWidth := keyWidth * 2
-	shiftWidth := keyWidth * 2
-	symbolWidth := keyWidth * 2
-	enterWidth := keyWidth + keyWidth/2
-
-	// Row widths for URL layout (QWERTY-based)
-	// Row 1: 5 shortcuts + backspace
-	row1Width := shortcutWidth*5 + keySpacing*4 + backspaceWidth + keySpacing
-	// Row 2: 10 URL special chars
-	row2Width := keyWidth*10 + keySpacing*9
-	// Row 3: 10 letters (qwertyuiop)
-	row3Width := keyWidth*10 + keySpacing*9
-	// Row 4: 9 letters (asdfghjkl) + enter
-	row4Width := keyWidth*9 + keySpacing*8 + enterWidth + keySpacing
-	// Row 5: shift + 7 letters (zxcvbnm) + symbol (no space for URLs)
-	row5Width := shiftWidth + keySpacing + keyWidth*7 + keySpacing*6 + symbolWidth + keySpacing
-
-	// Find the maximum width
-	maxRowWidth := row1Width
-	if row2Width > maxRowWidth {
-		maxRowWidth = row2Width
-	}
-	if row3Width > maxRowWidth {
-		maxRowWidth = row3Width
-	}
-	if row4Width > maxRowWidth {
-		maxRowWidth = row4Width
-	}
-	if row5Width > maxRowWidth {
-		maxRowWidth = row5Width
-	}
-
-	leftMargin := startX + (keyboardWidth-maxRowWidth)/2
-	y := keyboardStartY + keySpacing
+	maxRowWidth := internal.MaxRowWidth(row1Width, row2Width, row3Width, row4Width, row5Width)
+	leftMargin := dims.StartX + (dims.KeyboardWidth-maxRowWidth)/2
+	y := dims.KeyboardStartY + keySpacing
 
 	// Row 1: URL shortcuts + Backspace
 	x := leftMargin + (maxRowWidth-row1Width)/2
 	for i := 0; i < 5; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: shortcutWidth, H: keyHeight}
-		x += shortcutWidth + keySpacing
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: sizes.ShortcutWidth, H: keyHeight}
+		x += sizes.ShortcutWidth + keySpacing
 	}
-	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: backspaceWidth, H: keyHeight}
+	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: sizes.BackspaceWidth, H: keyHeight}
 
 	// Row 2: URL special characters
 	y += keyHeight + keySpacing
@@ -713,7 +533,7 @@ func setupURLKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32)
 		x += keyWidth + keySpacing
 	}
 
-	// Row 3: QWERTY row (qwertyuiop)
+	// Row 3: QWERTY row
 	y += keyHeight + keySpacing
 	x = leftMargin + (maxRowWidth-row3Width)/2
 	for i := 15; i < 25; i++ {
@@ -721,203 +541,70 @@ func setupURLKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32)
 		x += keyWidth + keySpacing
 	}
 
-	// Row 4: ASDF row (asdfghjkl) + Enter
+	// Row 4: ASDF row + Enter
 	y += keyHeight + keySpacing
 	x = leftMargin + (maxRowWidth-row4Width)/2
 	for i := 25; i < 34; i++ {
 		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 		x += keyWidth + keySpacing
 	}
-	kb.EnterRect = sdl.Rect{X: x, Y: y, W: enterWidth, H: keyHeight}
+	kb.EnterRect = sdl.Rect{X: x, Y: y, W: sizes.EnterWidth, H: keyHeight}
 
-	// Row 5: Shift + ZXCV row (zxcvbnm) + Symbol (no space for URLs)
+	// Row 5: Shift + ZXCV row + Symbol
 	y += keyHeight + keySpacing
 	x = leftMargin + (maxRowWidth-row5Width)/2
-	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: shiftWidth, H: keyHeight}
-	x += shiftWidth + keySpacing
+	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: sizes.ShiftWidth, H: keyHeight}
+	x += sizes.ShiftWidth + keySpacing
 	for i := 34; i < 41; i++ {
 		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 		x += keyWidth + keySpacing
 	}
-	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: symbolWidth, H: keyHeight}
+	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: sizes.SymbolWidth, H: keyHeight}
 
-	// No space key for URL layout
-	kb.SpaceRect = sdl.Rect{}
+	kb.SpaceRect = sdl.Rect{} // No space key for URL layout
 }
 
 func setupURLKeyboardRectsFor5(kb *virtualKeyboard, windowWidth, windowHeight int32) {
-	keyboardWidth := (windowWidth * 85) / 100
-	keyboardHeight := (windowHeight * 85) / 100
-	textInputHeight := windowHeight / 10
-	keyboardHeight = keyboardHeight - textInputHeight - 20
-	startX := (windowWidth - keyboardWidth) / 2
-	textInputY := (windowHeight - keyboardHeight - textInputHeight - 20) / 2
-	keyboardStartY := textInputY + textInputHeight + 20
-
-	kb.KeyboardRect = sdl.Rect{X: startX, Y: keyboardStartY, W: keyboardWidth, H: keyboardHeight}
-	kb.TextInputRect = sdl.Rect{X: startX, Y: textInputY, W: keyboardWidth, H: textInputHeight}
-
-	keyWidth := keyboardWidth / 12
-	keyHeight := keyboardHeight / 6
-	keySpacing := int32(3)
-
-	// Shortcut keys are wider to fit text like "https://" and ".com"
-	shortcutWidth := keyWidth * 2
-	backspaceWidth := keyWidth * 2
-	shiftWidth := keyWidth * 2
-	symbolWidth := keyWidth * 2
-	enterWidth := keyWidth + keyWidth/2
-
-	// Row widths for URL layout with 5 shortcuts
-	// Row 1: 5 shortcuts + backspace
-	row1Width := shortcutWidth*5 + keySpacing*4 + backspaceWidth + keySpacing
-	// Row 2: 10 URL special chars
-	row2Width := keyWidth*10 + keySpacing*9
-	// Row 3: 10 letters (qwertyuiop)
-	row3Width := keyWidth*10 + keySpacing*9
-	// Row 4: 9 letters (asdfghjkl) + enter
-	row4Width := keyWidth*9 + keySpacing*8 + enterWidth + keySpacing
-	// Row 5: shift + 7 letters (zxcvbnm) + symbol
-	row5Width := shiftWidth + keySpacing + keyWidth*7 + keySpacing*6 + symbolWidth + keySpacing
-
-	// Find the maximum width
-	maxRowWidth := row1Width
-	if row2Width > maxRowWidth {
-		maxRowWidth = row2Width
-	}
-	if row3Width > maxRowWidth {
-		maxRowWidth = row3Width
-	}
-	if row4Width > maxRowWidth {
-		maxRowWidth = row4Width
-	}
-	if row5Width > maxRowWidth {
-		maxRowWidth = row5Width
-	}
-
-	leftMargin := startX + (keyboardWidth-maxRowWidth)/2
-	y := keyboardStartY + keySpacing
-
-	// Row 1: URL shortcuts (0-4) + Backspace
-	x := leftMargin + (maxRowWidth-row1Width)/2
-	for i := 0; i < 5; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: shortcutWidth, H: keyHeight}
-		x += shortcutWidth + keySpacing
-	}
-	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: backspaceWidth, H: keyHeight}
-
-	// Row 2: URL special characters (5-14)
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row2Width)/2
-	for i := 5; i < 15; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-
-	// Row 3: QWERTY row (15-24)
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row3Width)/2
-	for i := 15; i < 25; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-
-	// Row 4: ASDF row (25-33) + Enter
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row4Width)/2
-	for i := 25; i < 34; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-	kb.EnterRect = sdl.Rect{X: x, Y: y, W: enterWidth, H: keyHeight}
-
-	// Row 5: Shift + ZXCV row (34-40) + Symbol
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row5Width)/2
-	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: shiftWidth, H: keyHeight}
-	x += shiftWidth + keySpacing
-	for i := 34; i < 41; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: symbolWidth, H: keyHeight}
-
-	// No space key for URL layout
-	kb.SpaceRect = sdl.Rect{}
+	// This layout is identical to setupURLKeyboardRects
+	setupURLKeyboardRects(kb, windowWidth, windowHeight)
 }
 
 func setupURLKeyboardRectsFor10(kb *virtualKeyboard, windowWidth, windowHeight int32) {
-	keyboardWidth := (windowWidth * 85) / 100
-	keyboardHeight := (windowHeight * 85) / 100
-	textInputHeight := windowHeight / 10
-	keyboardHeight = keyboardHeight - textInputHeight - 20
-	startX := (windowWidth - keyboardWidth) / 2
-	textInputY := (windowHeight - keyboardHeight - textInputHeight - 20) / 2
-	keyboardStartY := textInputY + textInputHeight + 20
+	dims := internal.CalculateKeyboardDimensions(windowWidth, windowHeight)
+	kb.KeyboardRect = dims.KeyboardRect()
+	kb.TextInputRect = dims.TextInputRect()
 
-	kb.KeyboardRect = sdl.Rect{X: startX, Y: keyboardStartY, W: keyboardWidth, H: keyboardHeight}
-	kb.TextInputRect = sdl.Rect{X: startX, Y: textInputY, W: keyboardWidth, H: textInputHeight}
+	sizes := internal.CalculateKeySizes(dims, 7) // 6 rows + padding
+	keyWidth := sizes.KeyWidth
+	keyHeight := sizes.KeyHeight
+	keySpacing := sizes.KeySpacing
 
-	keyWidth := keyboardWidth / 12
-	keyHeight := keyboardHeight / 7 // 6 rows + some padding
-	keySpacing := int32(3)
+	// Calculate row widths
+	row1Width := internal.CalculateRowWidth(5, sizes.ShortcutWidth, keySpacing, 0, sizes.BackspaceWidth)
+	row2Width := internal.CalculateRowWidth(5, sizes.ShortcutWidth, keySpacing, 0, 0)
+	row3Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
+	row4Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
+	row5Width := internal.CalculateRowWidth(9, keyWidth, keySpacing, 0, sizes.EnterWidth)
+	row6Width := internal.CalculateRowWidth(7, keyWidth, keySpacing, sizes.ShiftWidth, sizes.SymbolWidth)
 
-	// Shortcut keys are wider to fit text like "https://" and ".com"
-	shortcutWidth := keyWidth * 2
-	backspaceWidth := keyWidth * 2
-	shiftWidth := keyWidth * 2
-	symbolWidth := keyWidth * 2
-	enterWidth := keyWidth + keyWidth/2
-
-	// Row widths for URL layout with 10 shortcuts
-	// Row 1: 5 shortcuts + backspace
-	row1Width := shortcutWidth*5 + keySpacing*4 + backspaceWidth + keySpacing
-	// Row 2: 5 shortcuts (no backspace)
-	row2Width := shortcutWidth*5 + keySpacing*4
-	// Row 3: 10 URL special chars
-	row3Width := keyWidth*10 + keySpacing*9
-	// Row 4: 10 letters (qwertyuiop)
-	row4Width := keyWidth*10 + keySpacing*9
-	// Row 5: 9 letters (asdfghjkl) + enter
-	row5Width := keyWidth*9 + keySpacing*8 + enterWidth + keySpacing
-	// Row 6: shift + 7 letters (zxcvbnm) + symbol
-	row6Width := shiftWidth + keySpacing + keyWidth*7 + keySpacing*6 + symbolWidth + keySpacing
-
-	// Find the maximum width
-	maxRowWidth := row1Width
-	if row2Width > maxRowWidth {
-		maxRowWidth = row2Width
-	}
-	if row3Width > maxRowWidth {
-		maxRowWidth = row3Width
-	}
-	if row4Width > maxRowWidth {
-		maxRowWidth = row4Width
-	}
-	if row5Width > maxRowWidth {
-		maxRowWidth = row5Width
-	}
-	if row6Width > maxRowWidth {
-		maxRowWidth = row6Width
-	}
-
-	leftMargin := startX + (keyboardWidth-maxRowWidth)/2
-	y := keyboardStartY + keySpacing
+	maxRowWidth := internal.MaxRowWidth(row1Width, row2Width, row3Width, row4Width, row5Width, row6Width)
+	leftMargin := dims.StartX + (dims.KeyboardWidth-maxRowWidth)/2
+	y := dims.KeyboardStartY + keySpacing
 
 	// Row 1: URL shortcuts (0-4) + Backspace
 	x := leftMargin + (maxRowWidth-row1Width)/2
 	for i := 0; i < 5; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: shortcutWidth, H: keyHeight}
-		x += shortcutWidth + keySpacing
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: sizes.ShortcutWidth, H: keyHeight}
+		x += sizes.ShortcutWidth + keySpacing
 	}
-	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: backspaceWidth, H: keyHeight}
+	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: sizes.BackspaceWidth, H: keyHeight}
 
 	// Row 2: URL shortcuts (5-9)
 	y += keyHeight + keySpacing
 	x = leftMargin + (maxRowWidth-row2Width)/2
 	for i := 5; i < 10; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: shortcutWidth, H: keyHeight}
-		x += shortcutWidth + keySpacing
+		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: sizes.ShortcutWidth, H: keyHeight}
+		x += sizes.ShortcutWidth + keySpacing
 	}
 
 	// Row 3: URL special characters (10-19)
@@ -943,87 +630,74 @@ func setupURLKeyboardRectsFor10(kb *virtualKeyboard, windowWidth, windowHeight i
 		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 		x += keyWidth + keySpacing
 	}
-	kb.EnterRect = sdl.Rect{X: x, Y: y, W: enterWidth, H: keyHeight}
+	kb.EnterRect = sdl.Rect{X: x, Y: y, W: sizes.EnterWidth, H: keyHeight}
 
 	// Row 6: Shift + ZXCV row (39-45) + Symbol
 	y += keyHeight + keySpacing
 	x = leftMargin + (maxRowWidth-row6Width)/2
-	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: shiftWidth, H: keyHeight}
-	x += shiftWidth + keySpacing
+	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: sizes.ShiftWidth, H: keyHeight}
+	x += sizes.ShiftWidth + keySpacing
 	for i := 39; i < 46; i++ {
 		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 		x += keyWidth + keySpacing
 	}
-	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: symbolWidth, H: keyHeight}
+	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: sizes.SymbolWidth, H: keyHeight}
 
-	// No space key for URL layout
-	kb.SpaceRect = sdl.Rect{}
+	kb.SpaceRect = sdl.Rect{} // No space key for URL layout
 }
 
 func setupNumericKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
-	keyboardWidth := (windowWidth * 85) / 100
-	keyboardHeight := (windowHeight * 85) / 100
-	textInputHeight := windowHeight / 10
-	keyboardHeight = keyboardHeight - textInputHeight - 20
-	startX := (windowWidth - keyboardWidth) / 2
-	textInputY := (windowHeight - keyboardHeight - textInputHeight - 20) / 2
-	keyboardStartY := textInputY + textInputHeight + 20
+	dims := internal.CalculateKeyboardDimensions(windowWidth, windowHeight)
+	kb.KeyboardRect = dims.KeyboardRect()
+	kb.TextInputRect = dims.TextInputRect()
 
-	kb.KeyboardRect = sdl.Rect{X: startX, Y: keyboardStartY, W: keyboardWidth, H: keyboardHeight}
-	kb.TextInputRect = sdl.Rect{X: startX, Y: textInputY, W: keyboardWidth, H: textInputHeight}
-
-	// Numeric pad uses larger keys since there are fewer
-	keyWidth := keyboardWidth / 5
-	keyHeight := keyboardHeight / 5
-	keySpacing := int32(5)
-
-	backspaceWidth := keyWidth
-	enterWidth := keyWidth
+	sizes := internal.CalculateNumericKeySizes(dims)
+	keyWidth := sizes.KeyWidth
+	keyHeight := sizes.KeyHeight
+	keySpacing := sizes.KeySpacing
 
 	// Calculate grid width (3 digit keys + 1 action key per row)
-	gridWidth := keyWidth*3 + keySpacing*2 + backspaceWidth + keySpacing
-
-	// Center the grid
-	leftMargin := startX + (keyboardWidth-gridWidth)/2
-	y := keyboardStartY + keySpacing
+	gridWidth := keyWidth*3 + keySpacing*2 + sizes.BackspaceWidth + keySpacing
+	leftMargin := dims.StartX + (dims.KeyboardWidth-gridWidth)/2
+	y := dims.KeyboardStartY + keySpacing
 
 	// Row 1: 7, 8, 9, Backspace
 	x := leftMargin
-	kb.Keys[6].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 7
+	kb.Keys[6].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 	x += keyWidth + keySpacing
-	kb.Keys[7].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 8
+	kb.Keys[7].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 	x += keyWidth + keySpacing
-	kb.Keys[8].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 9
+	kb.Keys[8].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 	x += keyWidth + keySpacing
-	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: backspaceWidth, H: keyHeight}
+	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: sizes.BackspaceWidth, H: keyHeight}
 
 	// Row 2: 4, 5, 6, Enter
 	y += keyHeight + keySpacing
 	x = leftMargin
-	kb.Keys[3].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 4
+	kb.Keys[3].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 	x += keyWidth + keySpacing
-	kb.Keys[4].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 5
+	kb.Keys[4].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 	x += keyWidth + keySpacing
-	kb.Keys[5].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 6
+	kb.Keys[5].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 	x += keyWidth + keySpacing
-	kb.EnterRect = sdl.Rect{X: x, Y: y, W: enterWidth, H: keyHeight}
+	kb.EnterRect = sdl.Rect{X: x, Y: y, W: sizes.EnterWidth, H: keyHeight}
 
 	// Row 3: 1, 2, 3
 	y += keyHeight + keySpacing
 	x = leftMargin
-	kb.Keys[0].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 1
+	kb.Keys[0].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 	x += keyWidth + keySpacing
-	kb.Keys[1].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 2
+	kb.Keys[1].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 	x += keyWidth + keySpacing
-	kb.Keys[2].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight} // 3
+	kb.Keys[2].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
 
 	// Row 4: 0 (spans width of 3 keys)
 	y += keyHeight + keySpacing
 	x = leftMargin
 	zeroWidth := keyWidth*3 + keySpacing*2
-	kb.Keys[9].Rect = sdl.Rect{X: x, Y: y, W: zeroWidth, H: keyHeight} // 0
+	kb.Keys[9].Rect = sdl.Rect{X: x, Y: y, W: zeroWidth, H: keyHeight}
 
-	// Initialize unused rects to zero (shift, symbol, space not used in numeric mode)
+	// Unused special keys
 	kb.ShiftRect = sdl.Rect{}
 	kb.SymbolRect = sdl.Rect{}
 	kb.SpaceRect = sdl.Rect{}
@@ -1170,29 +844,10 @@ func (kb *virtualKeyboard) handleInputEvent(inputEvent *internal.Event) bool {
 
 	// Handle keyboard input
 	switch button {
-	case constants.VirtualButtonUp:
+	case constants.VirtualButtonUp, constants.VirtualButtonDown,
+		constants.VirtualButtonLeft, constants.VirtualButtonRight:
+		kb.directionalInput.SetHeld(button, true)
 		kb.navigate(button)
-		kb.heldDirections.up = true
-		kb.heldDirections.down = false
-		kb.lastRepeatTime = time.Now()
-		return false
-	case constants.VirtualButtonDown:
-		kb.navigate(button)
-		kb.heldDirections.down = true
-		kb.heldDirections.up = false
-		kb.lastRepeatTime = time.Now()
-		return false
-	case constants.VirtualButtonLeft:
-		kb.navigate(button)
-		kb.heldDirections.left = true
-		kb.heldDirections.right = false
-		kb.lastRepeatTime = time.Now()
-		return false
-	case constants.VirtualButtonRight:
-		kb.navigate(button)
-		kb.heldDirections.right = true
-		kb.heldDirections.left = false
-		kb.lastRepeatTime = time.Now()
 		return false
 	case constants.VirtualButtonA:
 		kb.processSelection()
@@ -1249,50 +904,12 @@ func (kb *virtualKeyboard) handleHelpInputEvent(button constants.VirtualButton) 
 }
 
 func (kb *virtualKeyboard) handleInputEventRelease(inputEvent *internal.Event) {
-	switch inputEvent.Button {
-	case constants.VirtualButtonUp:
-		kb.heldDirections.up = false
-		kb.hasRepeated = false
-	case constants.VirtualButtonDown:
-		kb.heldDirections.down = false
-		kb.hasRepeated = false
-	case constants.VirtualButtonLeft:
-		kb.heldDirections.left = false
-		kb.hasRepeated = false
-	case constants.VirtualButtonRight:
-		kb.heldDirections.right = false
-		kb.hasRepeated = false
-	}
+	kb.directionalInput.SetHeld(inputEvent.Button, false)
 }
 
 func (kb *virtualKeyboard) handleDirectionalRepeats() {
-	if !kb.heldDirections.up && !kb.heldDirections.down && !kb.heldDirections.left && !kb.heldDirections.right {
-		kb.lastRepeatTime = time.Now()
-		kb.hasRepeated = false
-		return
-	}
-
-	timeSince := time.Since(kb.lastRepeatTime)
-
-	// Use repeatDelay for first repeat, then repeatInterval for subsequent repeats
-	threshold := kb.repeatInterval
-	if !kb.hasRepeated {
-		threshold = kb.repeatDelay
-	}
-
-	if timeSince >= threshold {
-		kb.lastRepeatTime = time.Now()
-		kb.hasRepeated = true
-
-		if kb.heldDirections.up {
-			kb.navigate(constants.VirtualButtonUp)
-		} else if kb.heldDirections.down {
-			kb.navigate(constants.VirtualButtonDown)
-		} else if kb.heldDirections.left {
-			kb.navigate(constants.VirtualButtonLeft)
-		} else if kb.heldDirections.right {
-			kb.navigate(constants.VirtualButtonRight)
-		}
+	if dir := kb.directionalInput.Update(); dir != internal.DirectionNone {
+		kb.navigate(dir.VirtualButton())
 	}
 }
 

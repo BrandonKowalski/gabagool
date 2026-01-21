@@ -63,6 +63,10 @@ func GetInputProcessor() *Processor {
 	return globalInputProcessor
 }
 
+// Processor handles input mapping from physical devices to virtual buttons.
+// It processes SDL events and converts them to a unified input format,
+// supporting keyboard, game controllers, joysticks, and hat switches.
+// Also handles combo detection (chords and sequences).
 type Processor struct {
 	mapping                       *InputMapping
 	gameControllerJoystickIndices map[int]bool
