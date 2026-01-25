@@ -41,14 +41,15 @@ type ListOptions struct {
 	ScrollSpeed     float32 // Pixels per frame for text scrolling
 	ScrollPauseTime int     // Milliseconds to pause at scroll boundaries
 
-	InputDelay            time.Duration           // Debounce delay between inputs
-	MultiSelectButton     constants.VirtualButton // Button to toggle multi-select mode
-	ReorderButton         constants.VirtualButton // Button to enter reorder mode
-	ActionButton          constants.VirtualButton // Primary action button (triggers ListActionTriggered)
-	SecondaryActionButton constants.VirtualButton // Secondary action (triggers ListActionSecondaryTriggered)
-	HelpButton            constants.VirtualButton // Button to show help overlay
-	SelectAllButton       constants.VirtualButton // Button to select all items
-	DeselectAllButton     constants.VirtualButton // Button to deselect all items
+	InputDelay               time.Duration           // Debounce delay between inputs
+	MultiSelectButton        constants.VirtualButton // Button to toggle multi-select mode
+	MultiSelectConfirmButton constants.VirtualButton // Button to confirm multi-select (default: Start)
+	ReorderButton            constants.VirtualButton // Button to enter reorder mode
+	ActionButton             constants.VirtualButton // Primary action button (triggers ListActionTriggered)
+	SecondaryActionButton    constants.VirtualButton // Secondary action (triggers ListActionSecondaryTriggered)
+	HelpButton               constants.VirtualButton // Button to show help overlay
+	SelectAllButton          constants.VirtualButton // Button to select all items
+	DeselectAllButton        constants.VirtualButton // Button to deselect all items
 
 	EmptyMessage      string    // Message shown when Items is empty
 	EmptyMessageColor sdl.Color // Color for empty message
@@ -60,27 +61,28 @@ type ListOptions struct {
 // DefaultListOptions returns a ListOptions with sensible defaults for the given title and items.
 func DefaultListOptions(title string, items []MenuItem) ListOptions {
 	return ListOptions{
-		Title:                 title,
-		Items:                 items,
-		SelectedIndex:         0,
-		MaxVisibleItems:       9,
-		Margins:               internal.UniformPadding(20),
-		TitleAlign:            constants.TextAlignLeft,
-		TitleSpacing:          constants.DefaultTitleSpacing,
-		FooterColor:           sdl.Color{R: 180, G: 180, B: 180, A: 255},
-		ScrollSpeed:           4.0,
-		ScrollPauseTime:       1250,
-		InputDelay:            constants.DefaultInputDelay,
-		MultiSelectButton:     constants.VirtualButtonUnassigned,
-		ReorderButton:         constants.VirtualButtonUnassigned,
-		ActionButton:          constants.VirtualButtonUnassigned,
-		SecondaryActionButton: constants.VirtualButtonUnassigned,
-		HelpButton:            constants.VirtualButtonUnassigned,
-		SelectAllButton:       constants.VirtualButtonUnassigned,
-		DeselectAllButton:     constants.VirtualButtonUnassigned,
-		EmptyMessage:          "No items available",
-		EmptyMessageColor:     sdl.Color{R: 255, G: 255, B: 255, A: 255},
-		StatusBar:             DefaultStatusBarOptions(),
+		Title:                    title,
+		Items:                    items,
+		SelectedIndex:            0,
+		MaxVisibleItems:          9,
+		Margins:                  internal.UniformPadding(20),
+		TitleAlign:               constants.TextAlignLeft,
+		TitleSpacing:             constants.DefaultTitleSpacing,
+		FooterColor:              sdl.Color{R: 180, G: 180, B: 180, A: 255},
+		ScrollSpeed:              4.0,
+		ScrollPauseTime:          1250,
+		InputDelay:               constants.DefaultInputDelay,
+		MultiSelectButton:        constants.VirtualButtonUnassigned,
+		MultiSelectConfirmButton: constants.VirtualButtonStart,
+		ReorderButton:            constants.VirtualButtonUnassigned,
+		ActionButton:             constants.VirtualButtonUnassigned,
+		SecondaryActionButton:    constants.VirtualButtonUnassigned,
+		HelpButton:               constants.VirtualButtonUnassigned,
+		SelectAllButton:          constants.VirtualButtonUnassigned,
+		DeselectAllButton:        constants.VirtualButtonUnassigned,
+		EmptyMessage:             "No items available",
+		EmptyMessageColor:        sdl.Color{R: 255, G: 255, B: 255, A: 255},
+		StatusBar:                DefaultStatusBarOptions(),
 	}
 }
 
@@ -343,9 +345,9 @@ func (lc *listController) handleActionButtons(button constants.VirtualButton, ru
 		lc.ShowingHelp = !lc.ShowingHelp
 	}
 
-	if button == constants.VirtualButtonStart {
+	if lc.Options.MultiSelectConfirmButton != constants.VirtualButtonUnassigned &&
+		button == lc.Options.MultiSelectConfirmButton {
 		if lc.MultiSelect && len(lc.Options.Items) > 0 {
-			// Only allow start button when at least one item is selected
 			if indices := lc.getSelectedItems(); len(indices) > 0 {
 				*running = false
 				result.Action = ListActionSelected
@@ -625,6 +627,18 @@ func (lc *listController) render(window *internal.Window) {
 
 	for i := range lc.Options.Items {
 		lc.Options.Items[i].Focused = i == lc.Options.SelectedIndex
+	}
+
+	if len(lc.Options.Items) == 0 {
+		lc.renderContent(window, nil)
+		return
+	}
+
+	if lc.Options.SelectedIndex >= len(lc.Options.Items) {
+		lc.Options.SelectedIndex = max(0, len(lc.Options.Items)-1)
+	}
+	if lc.Options.VisibleStartIndex >= len(lc.Options.Items) {
+		lc.Options.VisibleStartIndex = max(0, len(lc.Options.Items)-1)
 	}
 
 	endIndex := min(lc.Options.VisibleStartIndex+lc.Options.MaxVisibleItems, len(lc.Options.Items))
