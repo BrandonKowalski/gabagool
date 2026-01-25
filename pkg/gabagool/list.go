@@ -275,7 +275,11 @@ func (lc *listController) handleNavigation(button constants.VirtualButton) bool 
 }
 
 func (lc *listController) handleActionButtons(button constants.VirtualButton, running *bool, result *ListResult, cancelled *bool) {
-	if len(lc.Options.Items) == 0 && button != constants.VirtualButtonB && button != constants.VirtualButtonMenu {
+	if len(lc.Options.Items) == 0 &&
+		button != constants.VirtualButtonB &&
+		button != constants.VirtualButtonMenu &&
+		button != lc.Options.ActionButton &&
+		button != lc.Options.SecondaryActionButton {
 		return
 	}
 
