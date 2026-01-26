@@ -23,7 +23,7 @@ type Window struct {
 	PowerButtonConfig PowerButtonConfig
 }
 
-func initWindow(title string, displayBackground bool) *Window {
+func initWindow(title string, displayBackground bool, winOpts WindowOptions) *Window {
 	displayIndex := 0
 	displayMode, err := sdl.GetCurrentDisplayMode(displayIndex)
 
@@ -31,10 +31,10 @@ func initWindow(title string, displayBackground bool) *Window {
 		GetInternalLogger().Error("Failed to Get display mode!", "error", err)
 	}
 
-	return initWindowWithSize(title, displayMode.W, displayMode.H, displayBackground)
+	return initWindowWithSize(title, displayMode.W, displayMode.H, displayBackground, winOpts)
 }
 
-func initWindowWithSize(title string, width, height int32, displayBackground bool) *Window {
+func initWindowWithSize(title string, width, height int32, displayBackground bool, winOpts WindowOptions) *Window {
 	x, y := int32(0), int32(0)
 
 	if constants.IsDevMode() {
@@ -62,12 +62,7 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 		}
 	}
 
-	var windowFlags uint32
-	windowFlags = sdl.WINDOW_SHOWN
-
-	if constants.IsDevMode() {
-		windowFlags = windowFlags | sdl.WINDOW_BORDERLESS
-	}
+	windowFlags := winOpts.ToSDLFlags()
 
 	GetInternalLogger().Debug("Initializing SDL Window", "width", width, "height", height)
 

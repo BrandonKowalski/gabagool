@@ -18,13 +18,14 @@ import (
 
 // Options configures the gabagool UI framework initialization.
 type Options struct {
-	WindowTitle          string // Window title displayed in windowed mode
-	ShowBackground       bool   // Whether to render the theme background
-	PrimaryThemeColorHex uint32 // Custom accent color (ignored on NextUI which uses system theme)
-	IsCannoli            bool   // Enable Cannoli CFW theming and input handling
-	IsNextUI             bool   // Enable NextUI CFW theming and power button handling
-	ControllerConfigFile string // Path to custom controller mapping file
-	LogFilename          string // Log file path (empty for stdout only)
+	WindowTitle          string                 // Window title displayed in windowed mode
+	ShowBackground       bool                   // Whether to render the theme background
+	WindowOptions        internal.WindowOptions // SDL window flags (borderless, resizable, etc.)
+	PrimaryThemeColorHex uint32                 // Custom accent color (ignored on NextUI which uses system theme)
+	IsCannoli            bool                   // Enable Cannoli CFW theming and input handling
+	IsNextUI             bool                   // Enable NextUI CFW theming and power button handling
+	ControllerConfigFile string                 // Path to custom controller mapping file
+	LogFilename          string                 // Log file path (empty for stdout only)
 }
 
 // Init initializes the SDL subsystems, theming, and input handling.
@@ -66,7 +67,7 @@ func Init(options Options) {
 		internal.SetTheme(theme)
 	}
 
-	internal.Init(options.WindowTitle, options.ShowBackground, pbc)
+	internal.Init(options.WindowTitle, options.ShowBackground, options.WindowOptions, pbc)
 
 	if os.Getenv("INPUT_CAPTURE") != "" {
 		mapping := InputLogger()
