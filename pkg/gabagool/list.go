@@ -11,74 +11,78 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+// ListOptions configures the behavior and appearance of a List component.
 type ListOptions struct {
-	Title             string
-	Items             []MenuItem
-	SelectedIndex     int
-	VisibleStartIndex int
-	MaxVisibleItems   int
+	Title             string     // Header text displayed at the top
+	Items             []MenuItem // Items to display in the list
+	SelectedIndex     int        // Initially selected item index
+	VisibleStartIndex int        // First visible item index (for scroll position restoration)
+	MaxVisibleItems   int        // Maximum items visible at once (auto-calculated if 0)
 
-	EnableImages bool
+	ShowImages bool // Display item images on the right side
 
-	StartInMultiSelectMode bool
-	DisableBackButton      bool
+	InitialMultiSelectMode bool // Start in multi-select mode
+	DisableBackButton      bool // Prevent B button from closing the list
 
-	HelpTitle    string
-	HelpText     []string
-	HelpExitText string
+	HelpTitle    string   // Title for the help overlay
+	HelpText     []string // Lines of help text
+	HelpExitText string   // Text shown at bottom of help overlay
 
-	Margins         internal.Padding
-	ItemSpacing     int32
-	SmallTitle      bool
-	TitleAlign      constants.TextAlign
-	TitleSpacing    int32
-	FooterText      string
-	FooterTextColor sdl.Color
-	FooterHelpItems []FooterHelpItem
-	StatusBar       StatusBarOptions
+	Margins         internal.Padding    // Screen edge margins
+	ItemSpacing     int32               // Vertical spacing between items
+	UseSmallTitle   bool                // Use smaller font for title
+	TitleAlign      constants.TextAlign // Title text alignment
+	TitleSpacing    int32               // Space between title and list items
+	FooterText      string              // Deprecated: use FooterHelpItems
+	FooterColor     sdl.Color           // Footer text color
+	FooterHelpItems []FooterHelpItem    // Button hints shown in footer
+	StatusBar       StatusBarOptions    // Status icons in top-right corner
 
-	ScrollSpeed     float32
-	ScrollPauseTime int
+	ScrollSpeed     float32 // Pixels per frame for text scrolling
+	ScrollPauseTime int     // Milliseconds to pause at scroll boundaries
 
-	InputDelay            time.Duration
-	MultiSelectButton     constants.VirtualButton
-	ReorderButton         constants.VirtualButton
-	ActionButton          constants.VirtualButton
-	SecondaryActionButton constants.VirtualButton
-	HelpButton            constants.VirtualButton
-	SelectAllButton       constants.VirtualButton
-	DeselectAllButton     constants.VirtualButton
+	InputDelay               time.Duration           // Debounce delay between inputs
+	MultiSelectButton        constants.VirtualButton // Button to toggle multi-select mode
+	MultiSelectConfirmButton constants.VirtualButton // Button to confirm multi-select (default: Start)
+	ReorderButton            constants.VirtualButton // Button to enter reorder mode
+	ActionButton             constants.VirtualButton // Primary action button (triggers ListActionTriggered)
+	SecondaryActionButton    constants.VirtualButton // Secondary action (triggers ListActionSecondaryTriggered)
+	HelpButton               constants.VirtualButton // Button to show help overlay
+	SelectAllButton          constants.VirtualButton // Button to select all items
+	DeselectAllButton        constants.VirtualButton // Button to deselect all items
 
-	EmptyMessage      string
-	EmptyMessageColor sdl.Color
+	EmptyMessage      string    // Message shown when Items is empty
+	EmptyMessageColor sdl.Color // Color for empty message
 
-	OnSelect  func(index int, item *MenuItem)
-	OnReorder func(from, to int)
+	OnSelect  func(index int, item *MenuItem) // Called when selection changes
+	OnReorder func(from, to int)              // Called when items are reordered
 }
 
+// DefaultListOptions returns a ListOptions with sensible defaults for the given title and items.
 func DefaultListOptions(title string, items []MenuItem) ListOptions {
 	return ListOptions{
-		Title:                 title,
-		Items:                 items,
-		SelectedIndex:         0,
-		MaxVisibleItems:       9,
-		Margins:               internal.UniformPadding(20),
-		TitleAlign:            constants.TextAlignLeft,
-		TitleSpacing:          constants.DefaultTitleSpacing,
-		FooterTextColor:       sdl.Color{R: 180, G: 180, B: 180, A: 255},
-		ScrollSpeed:           4.0,
-		ScrollPauseTime:       1250,
-		InputDelay:            constants.DefaultInputDelay,
-		MultiSelectButton:     constants.VirtualButtonUnassigned,
-		ReorderButton:         constants.VirtualButtonUnassigned,
-		ActionButton:          constants.VirtualButtonUnassigned,
-		SecondaryActionButton: constants.VirtualButtonUnassigned,
-		HelpButton:            constants.VirtualButtonUnassigned,
-		SelectAllButton:       constants.VirtualButtonUnassigned,
-		DeselectAllButton:     constants.VirtualButtonUnassigned,
-		EmptyMessage:          "No items available",
-		EmptyMessageColor:     sdl.Color{R: 255, G: 255, B: 255, A: 255},
-		StatusBar:             DefaultStatusBarOptions(),
+		Title:                    title,
+		Items:                    items,
+		SelectedIndex:            0,
+		MaxVisibleItems:          9,
+		Margins:                  internal.UniformPadding(20),
+		TitleAlign:               constants.TextAlignLeft,
+		TitleSpacing:             constants.DefaultTitleSpacing,
+		FooterColor:              sdl.Color{R: 180, G: 180, B: 180, A: 255},
+		ScrollSpeed:              4.0,
+		ScrollPauseTime:          1250,
+		InputDelay:               constants.DefaultInputDelay,
+		MultiSelectButton:        constants.VirtualButtonUnassigned,
+		MultiSelectConfirmButton: constants.VirtualButtonStart,
+		ReorderButton:            constants.VirtualButtonUnassigned,
+		ActionButton:             constants.VirtualButtonUnassigned,
+		SecondaryActionButton:    constants.VirtualButtonUnassigned,
+		HelpButton:               constants.VirtualButtonUnassigned,
+		SelectAllButton:          constants.VirtualButtonUnassigned,
+		DeselectAllButton:        constants.VirtualButtonUnassigned,
+		EmptyMessage:             "No items available",
+		EmptyMessageColor:        sdl.Color{R: 255, G: 255, B: 255, A: 255},
+		StatusBar:                DefaultStatusBarOptions(),
 	}
 }
 
@@ -96,13 +100,7 @@ type listController struct {
 	titleScrollData *internal.TextScrollData
 	textureCache    *internal.TextureCache
 
-	heldDirections struct {
-		up, down, left, right bool
-	}
-	lastRepeatTime time.Time
-	repeatDelay    time.Duration
-	repeatInterval time.Duration
-	hasRepeated    bool
+	directionalInput internal.DirectionalInput
 }
 
 func newListController(options ListOptions) *listController {
@@ -123,18 +121,16 @@ func newListController(options ListOptions) *listController {
 	}
 
 	return &listController{
-		Options:         options,
-		SelectedItems:   selectedItems,
-		MultiSelect:     options.StartInMultiSelectMode,
-		StartY:          20,
-		lastInputTime:   time.Now(),
-		helpOverlay:     helpOverlay,
-		itemScrollData:  make(map[int]*internal.TextScrollData),
-		titleScrollData: &internal.TextScrollData{},
-		textureCache:    internal.NewTextureCache(),
-		lastRepeatTime:  time.Now(),
-		repeatDelay:     150 * time.Millisecond,
-		repeatInterval:  50 * time.Millisecond,
+		Options:          options,
+		SelectedItems:    selectedItems,
+		MultiSelect:      options.InitialMultiSelectMode,
+		StartY:           20,
+		lastInputTime:    time.Now(),
+		helpOverlay:      helpOverlay,
+		itemScrollData:   make(map[int]*internal.TextScrollData),
+		titleScrollData:  &internal.TextScrollData{},
+		textureCache:     internal.NewTextureCache(),
+		directionalInput: internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 	}
 }
 
@@ -144,6 +140,8 @@ func (lc *listController) cleanup() {
 	}
 }
 
+// List displays a scrollable, selectable list of items with optional multi-select and reorder modes.
+// Returns the selected items and the action that was taken. Returns ErrCancelled if the user backs out.
 func List(options ListOptions) (*ListResult, error) {
 	window := internal.GetWindow()
 	renderer := window.Renderer
@@ -257,20 +255,7 @@ func (lc *listController) handleHelpInput(button constants.VirtualButton) {
 }
 
 func (lc *listController) handleInputEventRelease(inputEvent *internal.Event) {
-	switch inputEvent.Button {
-	case constants.VirtualButtonUp:
-		lc.heldDirections.up = false
-		lc.hasRepeated = false
-	case constants.VirtualButtonDown:
-		lc.heldDirections.down = false
-		lc.hasRepeated = false
-	case constants.VirtualButtonLeft:
-		lc.heldDirections.left = false
-		lc.hasRepeated = false
-	case constants.VirtualButtonRight:
-		lc.heldDirections.right = false
-		lc.hasRepeated = false
-	}
+	lc.directionalInput.SetHeld(inputEvent.Button, false)
 }
 
 func (lc *listController) isDirectionalInput(button constants.VirtualButton) bool {
@@ -283,37 +268,20 @@ func (lc *listController) handleNavigation(button constants.VirtualButton) bool 
 		return false
 	}
 
-	direction := ""
-	switch button {
-	case constants.VirtualButtonUp:
-		direction = "up"
-		lc.heldDirections.up = true
-		lc.heldDirections.down = false
-	case constants.VirtualButtonDown:
-		direction = "down"
-		lc.heldDirections.down = true
-		lc.heldDirections.up = false
-	case constants.VirtualButtonLeft:
-		direction = "left"
-		lc.heldDirections.left = true
-		lc.heldDirections.right = false
-	case constants.VirtualButtonRight:
-		direction = "right"
-		lc.heldDirections.right = true
-		lc.heldDirections.left = false
-	default:
-	}
-
-	if direction != "" {
-		lc.navigate(direction)
-		lc.lastRepeatTime = time.Now()
+	if lc.directionalInput.SetHeld(button, true) {
+		dir := lc.directionalInput.HeldDirection()
+		lc.navigate(dir.String())
 		return true
 	}
 	return false
 }
 
 func (lc *listController) handleActionButtons(button constants.VirtualButton, running *bool, result *ListResult, cancelled *bool) {
-	if len(lc.Options.Items) == 0 && button != constants.VirtualButtonB && button != constants.VirtualButtonMenu {
+	if len(lc.Options.Items) == 0 &&
+		button != constants.VirtualButtonB &&
+		button != constants.VirtualButtonMenu &&
+		button != lc.Options.ActionButton &&
+		button != lc.Options.SecondaryActionButton {
 		return
 	}
 
@@ -377,9 +345,9 @@ func (lc *listController) handleActionButtons(button constants.VirtualButton, ru
 		lc.ShowingHelp = !lc.ShowingHelp
 	}
 
-	if button == constants.VirtualButtonStart {
+	if lc.Options.MultiSelectConfirmButton != constants.VirtualButtonUnassigned &&
+		button == lc.Options.MultiSelectConfirmButton {
 		if lc.MultiSelect && len(lc.Options.Items) > 0 {
-			// Only allow start button when at least one item is selected
 			if indices := lc.getSelectedItems(); len(indices) > 0 {
 				*running = false
 				result.Action = ListActionSelected
@@ -644,33 +612,13 @@ func (lc *listController) scrollTo(index int) {
 }
 
 func (lc *listController) handleDirectionalRepeats() {
-	if len(lc.Options.Items) == 0 || (!lc.heldDirections.up && !lc.heldDirections.down && !lc.heldDirections.left && !lc.heldDirections.right) {
-		lc.lastRepeatTime = time.Now()
-		lc.hasRepeated = false
+	if len(lc.Options.Items) == 0 {
+		lc.directionalInput.Reset()
 		return
 	}
 
-	timeSince := time.Since(lc.lastRepeatTime)
-
-	// Use repeatDelay for first repeat, then repeatInterval for subsequent repeats
-	threshold := lc.repeatInterval
-	if !lc.hasRepeated {
-		threshold = lc.repeatDelay
-	}
-
-	if timeSince >= threshold {
-		lc.lastRepeatTime = time.Now()
-		lc.hasRepeated = true
-
-		if lc.heldDirections.up {
-			lc.navigate("up")
-		} else if lc.heldDirections.down {
-			lc.navigate("down")
-		} else if lc.heldDirections.left {
-			lc.navigate("left")
-		} else if lc.heldDirections.right {
-			lc.navigate("right")
-		}
+	if dir := lc.directionalInput.Update(); dir != internal.DirectionNone {
+		lc.navigate(dir.String())
 	}
 }
 
@@ -679,6 +627,18 @@ func (lc *listController) render(window *internal.Window) {
 
 	for i := range lc.Options.Items {
 		lc.Options.Items[i].Focused = i == lc.Options.SelectedIndex
+	}
+
+	if len(lc.Options.Items) == 0 {
+		lc.renderContent(window, nil)
+		return
+	}
+
+	if lc.Options.SelectedIndex >= len(lc.Options.Items) {
+		lc.Options.SelectedIndex = max(0, len(lc.Options.Items)-1)
+	}
+	if lc.Options.VisibleStartIndex >= len(lc.Options.Items) {
+		lc.Options.VisibleStartIndex = max(0, len(lc.Options.Items)-1)
 	}
 
 	endIndex := min(lc.Options.VisibleStartIndex+lc.Options.MaxVisibleItems, len(lc.Options.Items))
@@ -705,7 +665,7 @@ func (lc *listController) renderContent(window *internal.Window, visibleItems []
 
 	itemStartY := lc.StartY
 
-	if lc.Options.EnableImages && lc.Options.SelectedIndex < len(lc.Options.Items) {
+	if lc.Options.ShowImages && lc.Options.SelectedIndex < len(lc.Options.Items) {
 		selectedItem := lc.Options.Items[lc.Options.SelectedIndex]
 		if selectedItem.BackgroundFilename != "" {
 			lc.renderSelectedItemBackground(window, selectedItem.BackgroundFilename)
@@ -720,7 +680,7 @@ func (lc *listController) renderContent(window *internal.Window, visibleItems []
 
 	if lc.Options.Title != "" {
 		titleFont := internal.Fonts.ExtraLargeFont
-		if lc.Options.SmallTitle {
+		if lc.Options.UseSmallTitle {
 			titleFont = internal.Fonts.LargeFont
 		}
 		itemStartY = lc.renderScrollableTitle(renderer, titleFont, lc.Options.Title, lc.Options.TitleAlign, lc.StartY, lc.Options.Margins.Left+10, statusBarWidth) + lc.Options.TitleSpacing
@@ -749,7 +709,7 @@ func (lc *listController) renderContent(window *internal.Window, visibleItems []
 }
 
 func (lc *listController) imageIsDisplayed() bool {
-	if lc.Options.EnableImages && lc.Options.SelectedIndex < len(lc.Options.Items) {
+	if lc.Options.ShowImages && lc.Options.SelectedIndex < len(lc.Options.Items) {
 		selectedItem := lc.Options.Items[lc.Options.SelectedIndex]
 		if selectedItem.ImageFilename != "" {
 			return true
@@ -1104,7 +1064,7 @@ func (lc *listController) calculateMaxVisibleItems(window *internal.Window) int3
 
 	var titleHeight int32 = 0
 	if lc.Options.Title != "" {
-		if lc.Options.SmallTitle {
+		if lc.Options.UseSmallTitle {
 			titleHeight = int32(float32(50) * scaleFactor)
 		} else {
 			titleHeight = int32(float32(60) * scaleFactor)

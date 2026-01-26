@@ -7,6 +7,8 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+// helpOverlay renders a full-screen scrollable help text overlay.
+// Used by UI components to display contextual help when the menu button is pressed.
 type helpOverlay struct {
 	Title           string
 	Lines           []string
@@ -25,6 +27,7 @@ type helpOverlay struct {
 	ExitTextPadding int32
 }
 
+// newHelpOverlay creates a help overlay with the given title, content lines, and exit instruction text.
 func newHelpOverlay(title string, lines []string, exitText string) *helpOverlay {
 	window := internal.GetWindow()
 	width, height := window.Window.GetSize()
@@ -51,6 +54,7 @@ func newHelpOverlay(title string, lines []string, exitText string) *helpOverlay 
 	}
 }
 
+// render draws the help overlay if visible, including title, scrollable content, and exit text.
 func (h *helpOverlay) render(renderer *sdl.Renderer, font *ttf.Font) {
 	if !h.ShowingHelp {
 		return
@@ -115,12 +119,11 @@ func (h *helpOverlay) render(renderer *sdl.Renderer, font *ttf.Font) {
 	}
 
 	if h.MaxScrollOffset > 0 {
-
 		scrollbarX := h.Width - h.Padding - h.ScrollbarWidth
 		scrollbarY := contentY
 		scrollbarHeight := contentHeight
 
-		// Clear the scrollbar area first to prevent anti-aliasing artifacts
+		// Clear scrollbar area to prevent anti-aliasing artifacts from alpha blending
 		renderer.SetDrawColor(h.BackgroundColor.R, h.BackgroundColor.G, h.BackgroundColor.B, 255)
 		renderer.FillRect(&sdl.Rect{
 			X: scrollbarX - 2,
@@ -129,7 +132,6 @@ func (h *helpOverlay) render(renderer *sdl.Renderer, font *ttf.Font) {
 			H: scrollbarHeight + 4,
 		})
 
-		// Draw scrollbar background with smooth edges (using full opacity to avoid blending artifacts)
 		scrollbarBgColor := sdl.Color{R: 50, G: 50, B: 50, A: 255}
 		internal.DrawSmoothScrollbar(renderer, scrollbarX, scrollbarY, h.ScrollbarWidth, scrollbarHeight, scrollbarBgColor)
 
@@ -151,7 +153,6 @@ func (h *helpOverlay) render(renderer *sdl.Renderer, font *ttf.Font) {
 
 		handleY := scrollbarY + int32(float64(scrollbarHeight-handleHeight)*scrollRatio)
 
-		// Draw scrollbar handle with smooth edges (using full opacity to avoid blending artifacts)
 		internal.DrawSmoothScrollbar(renderer, scrollbarX, handleY, h.ScrollbarWidth, handleHeight, sdl.Color{R: 150, G: 150, B: 150, A: 255})
 	}
 
@@ -173,6 +174,7 @@ func (h *helpOverlay) render(renderer *sdl.Renderer, font *ttf.Font) {
 	}
 }
 
+// calculateMaxScroll computes the maximum scroll offset based on content height.
 func (h *helpOverlay) calculateMaxScroll() {
 	contentY := h.Padding + h.LineHeight*2
 	contentHeight := h.Height - contentY - h.Padding - h.LineHeight - h.ExitTextPadding*7
@@ -186,6 +188,7 @@ func (h *helpOverlay) calculateMaxScroll() {
 	}
 }
 
+// scroll moves the content up (negative) or down (positive) by one line.
 func (h *helpOverlay) scroll(direction int) {
 	if !h.ShowingHelp {
 		return
@@ -204,6 +207,7 @@ func (h *helpOverlay) scroll(direction int) {
 	h.ScrollOffset = newOffset
 }
 
+// handleInput processes D-pad input for scrolling. Returns true if the event was consumed.
 func (h *helpOverlay) handleInput(event interface{}) bool {
 	processor := internal.GetInputProcessor()
 	inputEvent := processor.ProcessSDLEvent(event.(sdl.Event))
@@ -228,6 +232,7 @@ func (h *helpOverlay) handleInput(event interface{}) bool {
 	}
 }
 
+// toggle shows or hides the help overlay, resetting scroll position when shown.
 func (h *helpOverlay) toggle() {
 	h.ShowingHelp = !h.ShowingHelp
 	if h.ShowingHelp {

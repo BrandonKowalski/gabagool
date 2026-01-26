@@ -11,52 +11,57 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+// MetadataItem represents a key-value pair for display in an info section.
 type MetadataItem struct {
 	Label string
 	Value string
 }
 
+// Section type constants for DetailScreen.
 const (
-	SectionTypeSlideshow = iota
-	SectionTypeInfo
-	SectionTypeDescription
-	SectionTypeImage
-	SectionTypeDropdown
+	SectionTypeSlideshow   = iota // Image slideshow with navigation dots
+	SectionTypeInfo               // Key-value metadata list
+	SectionTypeDescription        // Wrapped text paragraph
+	SectionTypeImage              // Single static image
+	SectionTypeDropdown           // Interactive dropdown selector
 )
 
+// DropdownOption represents a selectable option in a dropdown section.
 type DropdownOption struct {
-	Label string
-	Value string
+	Label string // Display text
+	Value string // Application-specific value
 }
 
+// Section defines a content block in a DetailScreen.
 type Section struct {
-	Type            int
-	Title           string
-	ImagePaths      []string
-	Metadata        []MetadataItem
-	Description     string
-	MaxWidth        int32
-	MaxHeight       int32
-	Alignment       int
-	DropdownOptions []DropdownOption
-	DropdownID      string
-	DefaultIndex    int
+	Type            int              // Section type (SectionTypeSlideshow, etc.)
+	Title           string           // Section header text
+	ImagePaths      []string         // Image paths for slideshow/image sections
+	Metadata        []MetadataItem   // Key-value pairs for info sections
+	Description     string           // Text content for description sections
+	MaxWidth        int32            // Maximum image width (0 = auto)
+	MaxHeight       int32            // Maximum image height (0 = auto)
+	Alignment       int              // Image alignment (cast from constants.TextAlign)
+	DropdownOptions []DropdownOption // Options for dropdown sections
+	DropdownID      string           // Unique identifier for dropdown state
+	DefaultIndex    int              // Initially selected dropdown index
 }
 
+// DetailScreenOptions configures the appearance and behavior of a DetailScreen.
 type DetailScreenOptions struct {
-	Sections            []Section
-	TitleColor          sdl.Color
-	MetadataColor       sdl.Color
-	DescriptionColor    sdl.Color
-	BackgroundColor     sdl.Color
-	EnableAction        bool
-	ActionButton        constants.VirtualButton
-	ConfirmButton       constants.VirtualButton
-	MaxImageHeight      int32
-	MaxImageWidth       int32
-	ShowScrollbar       bool
-	ShowThemeBackground bool
-	StatusBar           StatusBarOptions
+	Sections            []Section               // Content sections to display
+	TitleColor          sdl.Color               // Color for title text
+	MetadataColor       sdl.Color               // Color for metadata labels and values
+	DescriptionColor    sdl.Color               // Color for description text
+	BackgroundColor     sdl.Color               // Screen background color
+	AllowAction         bool                    // Enable action button (Y)
+	ActionButton        constants.VirtualButton // Button for primary action
+	ConfirmButton       constants.VirtualButton // Button to confirm and exit
+	MaxImageHeight      int32                   // Default max image height
+	MaxImageWidth       int32                   // Default max image width
+	ShowScrollbar       bool                    // Display scrollbar when content overflows
+	ShowThemeBackground bool                    // Render theme background image
+	StatusBar           StatusBarOptions        // Status icons configuration
 }
 
 // DropdownSelection represents the selected option from a dropdown.
@@ -114,6 +119,7 @@ type dropdownState struct {
 	expanded         bool
 }
 
+// DefaultInfoScreenOptions returns a DetailScreenOptions with sensible defaults.
 func DefaultInfoScreenOptions() DetailScreenOptions {
 	return DetailScreenOptions{
 		Sections:         []Section{},
@@ -124,10 +130,11 @@ func DefaultInfoScreenOptions() DetailScreenOptions {
 		ActionButton:     constants.VirtualButtonA,
 		ConfirmButton:    constants.VirtualButtonA,
 		ShowScrollbar:    true,
-		EnableAction:     false,
+		AllowAction:      false,
 	}
 }
 
+// NewSlideshowSection creates an image slideshow section with left/right navigation.
 func NewSlideshowSection(title string, imagePaths []string, maxWidth, maxHeight int32) Section {
 	return Section{
 		Type:       SectionTypeSlideshow,
@@ -138,6 +145,7 @@ func NewSlideshowSection(title string, imagePaths []string, maxWidth, maxHeight 
 	}
 }
 
+// NewInfoSection creates a metadata section with labeled key-value pairs.
 func NewInfoSection(title string, metadata []MetadataItem) Section {
 	return Section{
 		Type:     SectionTypeInfo,
@@ -146,6 +154,7 @@ func NewInfoSection(title string, metadata []MetadataItem) Section {
 	}
 }
 
+// NewDescriptionSection creates a text section with word-wrapped content.
 func NewDescriptionSection(title string, description string) Section {
 	return Section{
 		Type:        SectionTypeDescription,
@@ -154,6 +163,7 @@ func NewDescriptionSection(title string, description string) Section {
 	}
 }
 
+// NewImageSection creates a single image section with configurable alignment.
 func NewImageSection(title string, imagePath string, maxWidth, maxHeight int32, alignment constants.TextAlign) Section {
 	return Section{
 		Type:       SectionTypeImage,
@@ -165,6 +175,7 @@ func NewImageSection(title string, imagePath string, maxWidth, maxHeight int32, 
 	}
 }
 
+// NewDropdownSection creates an interactive dropdown with selectable options.
 func NewDropdownSection(title string, id string, options []DropdownOption, defaultIndex int) Section {
 	return Section{
 		Type:            SectionTypeDropdown,
@@ -429,16 +440,21 @@ func (s *detailScreenState) handleInputEvent(inputEvent *internal.Event) {
 		s.result.Action = DetailActionCancelled
 	case constants.VirtualButtonA:
 		// A button is used to expand/interact with dropdowns
-		s.handleDropdownActivation()
+		// If no dropdown was activated and A is the ConfirmButton, trigger confirm
+		if !s.handleDropdownActivation() && s.options.ConfirmButton == constants.VirtualButtonA {
+			s.result.Action = DetailActionConfirmed
+		}
 	case constants.VirtualButtonStart:
 		s.result.Action = DetailActionConfirmed
 	case s.options.ConfirmButton:
 		// Confirm button triggers confirm action (e.g., download)
+		// Skip A button since it's handled above
 		if inputEvent.Button != constants.VirtualButtonA {
 			s.result.Action = DetailActionConfirmed
 		}
 	case s.options.ActionButton:
-		if s.options.EnableAction && inputEvent.Button != s.options.ConfirmButton {
+		// Action button triggers action (e.g., options menu, logout)
+		if s.options.AllowAction {
 			s.result.Action = DetailActionTriggered
 		}
 	}

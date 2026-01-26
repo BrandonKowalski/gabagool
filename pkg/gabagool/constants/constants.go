@@ -1,3 +1,5 @@
+// Package constants defines shared constants, types, and configuration values
+// used throughout the gabagool UI framework.
 package constants
 
 import (
@@ -5,14 +7,19 @@ import (
 	"time"
 )
 
+// Development is the environment variable value for development mode.
 const Development = "DEV"
 
+// BackgroundPathEnvVar is the environment variable name for custom background image path.
 const BackgroundPathEnvVar = "BACKGROUND_PATH"
 
+// IsDevMode returns true if running in development mode (ENVIRONMENT=DEV).
 func IsDevMode() bool {
 	return os.Getenv("ENVIRONMENT") == Development
 }
 
+// VirtualButton represents an abstract input button, mapped from physical hardware.
+// This abstraction allows gabagool to work with different controller configurations.
 type VirtualButton int
 
 const (
@@ -88,15 +95,17 @@ func (vb VirtualButton) GetName() string {
 	}
 }
 
+// TextAlign specifies horizontal text alignment.
 type TextAlign int
 
 const (
-	TextAlignLeft TextAlign = iota
-	TextAlignCenter
-	TextAlignRight
+	TextAlignLeft   TextAlign = iota // Align text to the left edge
+	TextAlignCenter                  // Center text horizontally
+	TextAlignRight                   // Align text to the right edge
 )
 
+// Default timing and spacing constants.
 const (
-	DefaultInputDelay         = 20 * time.Millisecond
-	DefaultTitleSpacing int32 = 5
+	DefaultInputDelay         = 20 * time.Millisecond // Debounce delay between input events
+	DefaultTitleSpacing int32 = 5                     // Vertical spacing below title text
 )

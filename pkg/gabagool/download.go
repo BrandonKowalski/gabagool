@@ -1,6 +1,7 @@
 package gabagool
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,11 +16,12 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 )
 
+// Download represents a single file to download.
 type Download struct {
-	URL         string
-	Location    string
-	DisplayName string
-	Timeout     time.Duration
+	URL         string        // URL to download from
+	Location    string        // Local file path to save to
+	DisplayName string        // Optional display name (uses filename if empty)
+	Timeout     time.Duration // Request timeout (default: 120 minutes)
 }
 
 // DownloadError represents a failed download with its error.
@@ -34,9 +36,11 @@ type DownloadResult struct {
 	Failed    []DownloadError
 }
 
+// DownloadManagerOptions configures the download manager behavior.
 type DownloadManagerOptions struct {
-	AutoContinue  bool
-	MaxConcurrent int
+	AutoContinueOnComplete bool // Exit automatically when all downloads complete without errors
+	MaxConcurrent          int  // Maximum concurrent downloads (default: 3)
+	SkipSSLVerification    bool // Bypass SSL certificate validation (for self-signed certs)
 }
 
 type downloadJob struct {
@@ -73,9 +77,10 @@ type downloadManager struct {
 
 	scrollOffset int32
 
-	headers       map[string]string
-	lastInputTime time.Time
-	inputDelay    time.Duration
+	headers            map[string]string
+	lastInputTime      time.Time
+	inputDelay         time.Duration
+	insecureSkipVerify bool
 
 	showSpeed bool
 }
@@ -119,6 +124,7 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 	if opts.MaxConcurrent > 0 {
 		downloadManager.maxConcurrent = opts.MaxConcurrent
 	}
+	downloadManager.insecureSkipVerify = opts.SkipSSLVerification
 
 	result := DownloadResult{
 		Completed: []Download{},
@@ -194,7 +200,7 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 		if len(downloadManager.activeJobs) == 0 && len(downloadManager.downloadQueue) == 0 && !downloadManager.isAllComplete {
 			downloadManager.isAllComplete = true
 
-			if opts.AutoContinue && len(downloadManager.failedDownloads) == 0 {
+			if opts.AutoContinueOnComplete && len(downloadManager.failedDownloads) == 0 {
 				running = false
 			}
 		}
@@ -290,7 +296,7 @@ func (dm *downloadManager) cancelAllDownloads() {
 		close(job.cancelChan)
 		if !job.isComplete && !job.hasError {
 			job.hasError = true
-			job.error = fmt.Errorf("download cancelled by user")
+			job.error = ErrDownloadCancelled
 			dm.failedDownloads = append(dm.failedDownloads, job.download)
 			dm.errors = append(dm.errors, job.error)
 		}
@@ -298,7 +304,7 @@ func (dm *downloadManager) cancelAllDownloads() {
 
 	for _, job := range dm.downloadQueue {
 		job.hasError = true
-		job.error = fmt.Errorf("download cancelled by user")
+		job.error = ErrDownloadCancelled
 		dm.failedDownloads = append(dm.failedDownloads, job.download)
 		dm.errors = append(dm.errors, job.error)
 	}
@@ -339,6 +345,14 @@ func (dm *downloadManager) downloadFile(job *downloadJob) {
 	transport.MaxIdleConns = 100
 	transport.IdleConnTimeout = 90 * time.Second
 	transport.MaxIdleConnsPerHost = 10
+
+	// Apply InsecureSkipVerify if configured
+	if dm.insecureSkipVerify {
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{}
+		}
+		transport.TLSClientConfig.InsecureSkipVerify = true
+	}
 
 	client := &http.Client{
 		Timeout:   job.timeout,
@@ -408,7 +422,7 @@ func (dm *downloadManager) downloadFile(job *downloadJob) {
 		}
 	case <-job.cancelChan:
 		job.hasError = true
-		job.error = fmt.Errorf("download canceled")
+		job.error = ErrDownloadCancelled
 	}
 }
 

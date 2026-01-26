@@ -46,7 +46,7 @@ type OptionListSettings struct {
 	InitialSelectedIndex  int
 	VisibleStartIndex     int
 	DisableBackButton     bool
-	SmallTitle            bool
+	UseSmallTitle         bool
 	FooterHelpItems       []FooterHelpItem
 	HelpExitText          string
 	ActionButton          constants.VirtualButton
@@ -111,11 +111,11 @@ type internalOptionsListSettings struct {
 	Title                 string
 	TitleAlign            constants.TextAlign
 	TitleSpacing          int32
-	SmallTitle            bool
+	UseSmallTitle         bool
 	ScrollSpeed           float32
 	ScrollPauseTime       int
 	FooterHelpItems       []FooterHelpItem
-	FooterTextColor       sdl.Color
+	FooterColor           sdl.Color
 	DisableBackButton     bool
 	HelpExitText          string
 	ActionButton          constants.VirtualButton
@@ -143,13 +143,7 @@ type optionsListController struct {
 	showingColorPicker   bool
 	activeColorPickerIdx int
 
-	heldDirections struct {
-		up, down, left, right bool
-	}
-	lastRepeatTime time.Time
-	repeatDelay    time.Duration
-	repeatInterval time.Duration
-	hasRepeated    bool
+	directionalInput internal.DirectionalInput
 }
 
 func defaultOptionsListSettings(title string) internalOptionsListSettings {
@@ -162,7 +156,7 @@ func defaultOptionsListSettings(title string) internalOptionsListSettings {
 		TitleSpacing:    constants.DefaultTitleSpacing,
 		ScrollSpeed:     150.0,
 		ScrollPauseTime: 25,
-		FooterTextColor: sdl.Color{R: 180, G: 180, B: 180, A: 255},
+		FooterColor:     sdl.Color{R: 180, G: 180, B: 180, A: 255},
 		FooterHelpItems: []FooterHelpItem{},
 		ConfirmButton:   constants.VirtualButtonStart,
 		StatusBar:       DefaultStatusBarOptions(),
@@ -246,9 +240,7 @@ func newOptionsListController(title string, items []ItemWithOptions) *optionsLis
 		itemScrollData:       make(map[int]*internal.TextScrollData),
 		showingColorPicker:   false,
 		activeColorPickerIdx: -1,
-		lastRepeatTime:       time.Now(),
-		repeatDelay:          150 * time.Millisecond,
-		repeatInterval:       50 * time.Millisecond,
+		directionalInput:     internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 	}
 }
 
@@ -264,7 +256,7 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 	optionsListController.MaxVisibleItems = int(optionsListController.calculateMaxVisibleItems(window))
 	optionsListController.Settings.FooterHelpItems = listOptions.FooterHelpItems
 	optionsListController.Settings.DisableBackButton = listOptions.DisableBackButton
-	optionsListController.Settings.SmallTitle = listOptions.SmallTitle
+	optionsListController.Settings.UseSmallTitle = listOptions.UseSmallTitle
 	optionsListController.Settings.HelpExitText = listOptions.HelpExitText
 	optionsListController.Settings.ActionButton = listOptions.ActionButton
 	optionsListController.Settings.SecondaryActionButton = listOptions.SecondaryActionButton
@@ -367,7 +359,7 @@ func (olc *optionsListController) calculateMaxVisibleItems(window *internal.Wind
 
 	var titleHeight int32 = 0
 	if olc.Settings.Title != "" {
-		if olc.Settings.SmallTitle {
+		if olc.Settings.UseSmallTitle {
 			titleHeight = int32(float32(50) * scaleFactor)
 		} else {
 			titleHeight = int32(float32(60) * scaleFactor)
@@ -476,42 +468,34 @@ func (olc *optionsListController) handleOptionsInput(inputEvent *internal.Event,
 		olc.lastInputTime = time.Now()
 
 	case constants.VirtualButtonLeft:
+		olc.directionalInput.SetHeld(inputEvent.Button, true)
 		if !olc.ShowingHelp {
 			olc.cycleOptionLeft()
-			olc.heldDirections.left = true
-			olc.heldDirections.right = false
-			olc.lastRepeatTime = time.Now()
 		}
 		olc.lastInputTime = time.Now()
 
 	case constants.VirtualButtonRight:
+		olc.directionalInput.SetHeld(inputEvent.Button, true)
 		if !olc.ShowingHelp {
 			olc.cycleOptionRight()
-			olc.heldDirections.right = true
-			olc.heldDirections.left = false
-			olc.lastRepeatTime = time.Now()
 		}
 		olc.lastInputTime = time.Now()
 
 	case constants.VirtualButtonUp:
+		olc.directionalInput.SetHeld(inputEvent.Button, true)
 		if olc.ShowingHelp {
 			olc.scrollHelpOverlay(-1)
 		} else {
 			olc.moveSelection(-1)
-			olc.heldDirections.up = true
-			olc.heldDirections.down = false
-			olc.lastRepeatTime = time.Now()
 		}
 		olc.lastInputTime = time.Now()
 
 	case constants.VirtualButtonDown:
+		olc.directionalInput.SetHeld(inputEvent.Button, true)
 		if olc.ShowingHelp {
 			olc.scrollHelpOverlay(1)
 		} else {
 			olc.moveSelection(1)
-			olc.heldDirections.down = true
-			olc.heldDirections.up = false
-			olc.lastRepeatTime = time.Now()
 		}
 		olc.lastInputTime = time.Now()
 
@@ -550,61 +534,35 @@ func (olc *optionsListController) handleOptionsInput(inputEvent *internal.Event,
 }
 
 func (olc *optionsListController) handleInputEventRelease(inputEvent *internal.Event) {
-	switch inputEvent.Button {
-	case constants.VirtualButtonUp:
-		olc.heldDirections.up = false
-		olc.hasRepeated = false
-	case constants.VirtualButtonDown:
-		olc.heldDirections.down = false
-		olc.hasRepeated = false
-	case constants.VirtualButtonLeft:
-		olc.heldDirections.left = false
-		olc.hasRepeated = false
-	case constants.VirtualButtonRight:
-		olc.heldDirections.right = false
-		olc.hasRepeated = false
-	}
+	olc.directionalInput.SetHeld(inputEvent.Button, false)
 }
 
 func (olc *optionsListController) handleDirectionalRepeats() {
-	if !olc.heldDirections.up && !olc.heldDirections.down && !olc.heldDirections.left && !olc.heldDirections.right {
-		olc.lastRepeatTime = time.Now()
-		olc.hasRepeated = false
+	dir := olc.directionalInput.Update()
+	if dir == internal.DirectionNone {
 		return
 	}
 
-	timeSince := time.Since(olc.lastRepeatTime)
-
-	// Use repeatDelay for first repeat, then repeatInterval for subsequent repeats
-	threshold := olc.repeatInterval
-	if !olc.hasRepeated {
-		threshold = olc.repeatDelay
-	}
-
-	if timeSince >= threshold {
-		olc.lastRepeatTime = time.Now()
-		olc.hasRepeated = true
-
-		if olc.heldDirections.up {
-			if olc.ShowingHelp {
-				olc.scrollHelpOverlay(-1)
-			} else {
-				olc.moveSelection(-1)
-			}
-		} else if olc.heldDirections.down {
-			if olc.ShowingHelp {
-				olc.scrollHelpOverlay(1)
-			} else {
-				olc.moveSelection(1)
-			}
-		} else if olc.heldDirections.left {
-			if !olc.ShowingHelp {
-				olc.cycleOptionLeft()
-			}
-		} else if olc.heldDirections.right {
-			if !olc.ShowingHelp {
-				olc.cycleOptionRight()
-			}
+	switch dir {
+	case internal.DirectionUp:
+		if olc.ShowingHelp {
+			olc.scrollHelpOverlay(-1)
+		} else {
+			olc.moveSelection(-1)
+		}
+	case internal.DirectionDown:
+		if olc.ShowingHelp {
+			olc.scrollHelpOverlay(1)
+		} else {
+			olc.moveSelection(1)
+		}
+	case internal.DirectionLeft:
+		if !olc.ShowingHelp {
+			olc.cycleOptionLeft()
+		}
+	case internal.DirectionRight:
+		if !olc.ShowingHelp {
+			olc.cycleOptionRight()
 		}
 	}
 }
@@ -833,7 +791,7 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 	scaleFactor := internal.GetScaleFactor()
 	window := internal.GetWindow()
 	titleFont := internal.Fonts.ExtraLargeFont
-	if olc.Settings.SmallTitle {
+	if olc.Settings.UseSmallTitle {
 		titleFont = internal.Fonts.LargeFont
 	}
 	font := internal.Fonts.SmallFont

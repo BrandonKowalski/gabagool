@@ -10,6 +10,7 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 )
 
+// Window wraps SDL window and renderer with additional state for the UI framework.
 type Window struct {
 	Window            *sdl.Window
 	Renderer          *sdl.Renderer
