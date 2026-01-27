@@ -38,6 +38,11 @@ const (
 
 	// InputMappingPathEnvVar specifies a custom input mapping file path.
 	InputMappingPathEnvVar = "INPUT_MAPPING_PATH"
+
+	// FlipFaceButtonsEnvVar disables the default A↔B and X↔Y swap when set.
+	// By default, gabagool swaps face buttons for Nintendo-style layouts.
+	// Set this to "1" or "true" for direct mapping (A=A, B=B, X=X, Y=Y).
+	FlipFaceButtonsEnvVar = "FLIP_FACE_BUTTONS"
 )
 
 // IsDevMode returns true if running in development mode (ENVIRONMENT=DEV).

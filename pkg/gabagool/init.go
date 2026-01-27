@@ -27,6 +27,7 @@ type Options struct {
 	IsNextUI             bool                   // Enable NextUI CFW theming and power button handling
 	ControllerConfigFile string                 // Path to custom controller mapping file
 	LogFilename          string                 // Log file path (empty for stdout only)
+	FlipFaceButtons      bool                   // Use direct face button mapping (A=A, B=B) instead of Nintendo-style swap
 }
 
 // Init initializes the SDL subsystems, theming, and input handling.
@@ -42,6 +43,9 @@ func Init(options Options) {
 	} else {
 		internal.SetInternalLogLevel(slog.LevelError)
 	}
+
+	// Set face button flip preference before input mapping is loaded
+	internal.SetFlipFaceButtons(options.FlipFaceButtons)
 
 	pbc := internal.PowerButtonConfig{}
 
@@ -113,6 +117,14 @@ func SetRawLogLevel(level string) {
 // Use this to override the default controller/keyboard bindings.
 func SetInputMappingBytes(data []byte) {
 	internal.SetInputMappingBytes(data)
+}
+
+// SetFlipFaceButtons enables or disables direct face button mapping.
+// When true, uses A=A, B=B, X=X, Y=Y instead of the default Nintendo-style swap.
+// Can also be set via the FLIP_FACE_BUTTONS environment variable.
+// Call before Init() to take effect.
+func SetFlipFaceButtons(flip bool) {
+	internal.SetFlipFaceButtons(flip)
 }
 
 // GetWindow returns the underlying SDL window wrapper for advanced use cases.

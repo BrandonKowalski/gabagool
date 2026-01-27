@@ -11,10 +11,17 @@ import (
 )
 
 var inputMappingBytes []byte
+var flipFaceButtons bool
 
 // SetInputMappingBytes sets the input mapping data from embedded JSON bytes.
 func SetInputMappingBytes(data []byte) {
 	inputMappingBytes = data
+}
+
+// SetFlipFaceButtons enables or disables face button flipping.
+// When true, uses direct mapping (A=A, B=B, X=X, Y=Y) instead of the default swap.
+func SetFlipFaceButtons(flip bool) {
+	flipFaceButtons = flip
 }
 
 // Source identifies the physical input source for an event.
@@ -144,29 +151,60 @@ func DefaultInputMapping() *InputMapping {
 }
 
 // GetInputMapping returns the input mapping from embedded bytes if set,
-// from the environment variable if set, otherwise returns the default mapping
+// from the environment variable if set, otherwise returns the default mapping.
+// If FlipFaceButtons is enabled (via SetFlipFaceButtons or FLIP_FACE_BUTTONS env var),
+// the face button swap is disabled, giving direct mapping (A=A, B=B, X=X, Y=Y).
 func GetInputMapping() *InputMapping {
 	logger := GetInternalLogger()
 
+	var mapping *InputMapping
+
 	if len(inputMappingBytes) > 0 {
-		mapping, err := LoadInputMappingFromBytes(inputMappingBytes)
+		m, err := LoadInputMappingFromBytes(inputMappingBytes)
 		if err == nil {
 			logger.Info("Loaded custom input mapping from embedded bytes")
-			return mapping
+			mapping = m
+		} else {
+			logger.Warn("Failed to load custom input mapping from bytes, trying file path", "error", err)
 		}
-		logger.Warn("Failed to load custom input mapping from bytes, trying file path", "error", err)
 	}
 
-	mappingPath := os.Getenv(constants.InputMappingPathEnvVar)
-	if mappingPath != "" {
-		mapping, err := LoadInputMappingFromJSON(mappingPath)
-		if err == nil {
-			logger.Info("Loaded custom input mapping from environment variable", "path", mappingPath)
-			return mapping
+	if mapping == nil {
+		mappingPath := os.Getenv(constants.InputMappingPathEnvVar)
+		if mappingPath != "" {
+			m, err := LoadInputMappingFromJSON(mappingPath)
+			if err == nil {
+				logger.Info("Loaded custom input mapping from environment variable", "path", mappingPath)
+				mapping = m
+			} else {
+				logger.Warn("Failed to load custom input mapping, using default", "path", mappingPath, "error", err)
+			}
 		}
-		logger.Warn("Failed to load custom input mapping, using default", "path", mappingPath, "error", err)
 	}
-	return DefaultInputMapping()
+
+	if mapping == nil {
+		mapping = DefaultInputMapping()
+	}
+
+	// Check if face buttons should be flipped to direct mapping
+	if shouldFlipFaceButtons() {
+		logger.Info("Flipping face buttons to direct mapping (A=A, B=B, X=X, Y=Y)")
+		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_A] = constants.VirtualButtonA
+		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_B] = constants.VirtualButtonB
+		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_X] = constants.VirtualButtonX
+		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_Y] = constants.VirtualButtonY
+	}
+
+	return mapping
+}
+
+// shouldFlipFaceButtons returns true if face buttons should use direct mapping.
+func shouldFlipFaceButtons() bool {
+	if flipFaceButtons {
+		return true
+	}
+	env := os.Getenv(constants.FlipFaceButtonsEnvVar)
+	return env == "1" || env == "true"
 }
 
 func LoadInputMappingFromJSON(filePath string) (*InputMapping, error) {
