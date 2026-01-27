@@ -10,9 +10,6 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 )
 
-// MappingPathEnvVar is the environment variable for custom input mapping file path.
-const MappingPathEnvVar = "INPUT_MAPPING_PATH"
-
 var inputMappingBytes []byte
 
 // SetInputMappingBytes sets the input mapping data from embedded JSON bytes.
@@ -160,7 +157,7 @@ func GetInputMapping() *InputMapping {
 		logger.Warn("Failed to load custom input mapping from bytes, trying file path", "error", err)
 	}
 
-	mappingPath := os.Getenv(MappingPathEnvVar)
+	mappingPath := os.Getenv(constants.InputMappingPathEnvVar)
 	if mappingPath != "" {
 		mapping, err := LoadInputMappingFromJSON(mappingPath)
 		if err == nil {

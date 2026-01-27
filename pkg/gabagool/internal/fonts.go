@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"os"
 
+	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
@@ -96,7 +97,7 @@ func GetScaleFactor() float32 {
 
 func initFonts(sizes FontSizes) {
 	screenWidth := GetWindow().GetWidth()
-	fallback := os.Getenv("FALLBACK_FONT")
+	fallback := os.Getenv(constants.FallbackFontEnvVar)
 
 	// Calculate all sizes
 	calcSize := func(base int) int {

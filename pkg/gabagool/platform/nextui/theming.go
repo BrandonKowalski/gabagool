@@ -36,7 +36,7 @@ func InitNextUITheme() internal.Theme {
 	var err error
 
 	if constants.IsDevMode() {
-		nv, err = InitStaticNextVal(os.Getenv("NEXTVAL_PATH"))
+		nv, err = InitStaticNextVal(os.Getenv(constants.NextvalPathEnvVar))
 	} else {
 		nv, err = loadNextVal()
 	}

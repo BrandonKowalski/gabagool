@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/internal"
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/platform/cannoli"
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/platform/nextui"
@@ -36,7 +37,7 @@ func Init(options Options) {
 		internal.SetLogFilename(options.LogFilename)
 	}
 
-	if os.Getenv("NITRATES") != "" || os.Getenv("INPUT_CAPTURE") != "" {
+	if os.Getenv(constants.NitratesEnvVar) != "" || os.Getenv(constants.InputCaptureEnvVar) != "" {
 		internal.SetInternalLogLevel(slog.LevelDebug)
 	} else {
 		internal.SetInternalLogLevel(slog.LevelError)
@@ -69,7 +70,7 @@ func Init(options Options) {
 
 	internal.Init(options.WindowTitle, options.ShowBackground, options.WindowOptions, pbc)
 
-	if os.Getenv("INPUT_CAPTURE") != "" {
+	if os.Getenv(constants.InputCaptureEnvVar) != "" {
 		mapping := InputLogger()
 		if mapping != nil {
 			err := mapping.SaveToJSON("custom_input_mapping.json")

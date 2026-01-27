@@ -39,7 +39,7 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 
 	if constants.IsDevMode() {
 		x, y = int32(50), int32(50)
-		if v := os.Getenv("WINDOW_WIDTH"); v != "" {
+		if v := os.Getenv(constants.WindowWidthEnvVar); v != "" {
 			if n, err := strconv.ParseInt(v, 10, 32); err == nil {
 				width = int32(n)
 			} else {
@@ -50,7 +50,7 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 			width = 1024
 		}
 
-		if v := os.Getenv("WINDOW_HEIGHT"); v != "" {
+		if v := os.Getenv(constants.WindowHeightEnvVar); v != "" {
 			if n, err := strconv.ParseInt(v, 10, 32); err == nil {
 				height = int32(n)
 			} else {

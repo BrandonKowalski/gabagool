@@ -10,12 +10,39 @@ import (
 // Development is the environment variable value for development mode.
 const Development = "DEV"
 
-// BackgroundPathEnvVar is the environment variable name for custom background image path.
-const BackgroundPathEnvVar = "BACKGROUND_PATH"
+// Environment variable names used throughout the gabagool framework.
+const (
+	// EnvironmentEnvVar controls the runtime mode (set to "DEV" for development).
+	EnvironmentEnvVar = "ENVIRONMENT"
+
+	// BackgroundPathEnvVar specifies a custom background image path.
+	BackgroundPathEnvVar = "BACKGROUND_PATH"
+
+	// NextvalPathEnvVar specifies the path to the NextUI nextval config file (dev mode).
+	NextvalPathEnvVar = "NEXTVAL_PATH"
+
+	// NitratesEnvVar enables debug logging when set.
+	NitratesEnvVar = "NITRATES"
+
+	// InputCaptureEnvVar triggers the input logger wizard when set.
+	InputCaptureEnvVar = "INPUT_CAPTURE"
+
+	// WindowWidthEnvVar overrides the window width in dev mode.
+	WindowWidthEnvVar = "WINDOW_WIDTH"
+
+	// WindowHeightEnvVar overrides the window height in dev mode.
+	WindowHeightEnvVar = "WINDOW_HEIGHT"
+
+	// FallbackFontEnvVar specifies a fallback font path.
+	FallbackFontEnvVar = "FALLBACK_FONT"
+
+	// InputMappingPathEnvVar specifies a custom input mapping file path.
+	InputMappingPathEnvVar = "INPUT_MAPPING_PATH"
+)
 
 // IsDevMode returns true if running in development mode (ENVIRONMENT=DEV).
 func IsDevMode() bool {
-	return os.Getenv("ENVIRONMENT") == Development
+	return os.Getenv(EnvironmentEnvVar) == Development
 }
 
 // VirtualButton represents an abstract input button, mapped from physical hardware.
