@@ -53,6 +53,7 @@ type OptionListSettings struct {
 	SecondaryActionButton constants.VirtualButton
 	ConfirmButton         constants.VirtualButton // Default: VirtualButtonStart
 	StatusBar             StatusBarOptions
+	ListPickerButton      constants.VirtualButton // Button to show a list picker for standard options
 }
 
 // ItemWithOptions represents a menu item with multiple choices.
@@ -122,6 +123,7 @@ type internalOptionsListSettings struct {
 	SecondaryActionButton constants.VirtualButton
 	ConfirmButton         constants.VirtualButton
 	StatusBar             StatusBarOptions
+	ListPickerButton      constants.VirtualButton
 }
 
 type optionsListController struct {
@@ -261,6 +263,7 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 	optionsListController.Settings.ActionButton = listOptions.ActionButton
 	optionsListController.Settings.SecondaryActionButton = listOptions.SecondaryActionButton
 	optionsListController.Settings.StatusBar = listOptions.StatusBar
+	optionsListController.Settings.ListPickerButton = listOptions.ListPickerButton
 
 	// Use provided ConfirmButton or default to VirtualButtonStart
 	if listOptions.ConfirmButton != constants.VirtualButtonUnassigned {
@@ -530,6 +533,14 @@ func (olc *optionsListController) handleOptionsInput(inputEvent *internal.Event,
 			}
 			olc.lastInputTime = time.Now()
 		}
+
+		if olc.Settings.ListPickerButton != constants.VirtualButtonUnassigned &&
+			inputEvent.Button == olc.Settings.ListPickerButton {
+			if !olc.ShowingHelp && olc.SelectedIndex >= 0 && olc.SelectedIndex < len(olc.Items) {
+				olc.showListPicker()
+			}
+			olc.lastInputTime = time.Now()
+		}
 	}
 }
 
@@ -605,6 +616,11 @@ func (olc *optionsListController) handleAButton(running *bool, result *OptionsLi
 				*running = false
 				result.Action = ListActionSelected
 				result.Selected = olc.SelectedIndex
+			case OptionTypeStandard:
+				// Show list picker if enabled via ListPickerButton set to A
+				if olc.Settings.ListPickerButton == constants.VirtualButtonA {
+					olc.showListPicker()
+				}
 			}
 		}
 	}
@@ -679,6 +695,92 @@ func (olc *optionsListController) hideColorPicker() {
 	}
 	olc.showingColorPicker = false
 	olc.activeColorPickerIdx = -1
+}
+
+func (olc *optionsListController) showListPicker() {
+	item := &olc.Items[olc.SelectedIndex]
+
+	if len(item.Options) <= 1 {
+		return
+	}
+
+	// Only show list picker for standard or keyboard options
+	if len(item.Options) > 0 && item.SelectedOption < len(item.Options) {
+		optType := item.Options[item.SelectedOption].Type
+		if optType != OptionTypeStandard && optType != OptionTypeKeyboard {
+			return
+		}
+	}
+
+	menuItems := make([]MenuItem, len(item.Options))
+	for i, opt := range item.Options {
+		menuItems[i] = MenuItem{
+			Text:     opt.DisplayName,
+			Metadata: i,
+		}
+	}
+
+	listOpts := DefaultListOptions(item.Item.Text, menuItems)
+	listOpts.SelectedIndex = item.SelectedOption
+	listOpts.UseSmallTitle = true
+	listOpts.FooterHelpItems = []FooterHelpItem{
+		{ButtonName: "B", HelpText: "Back"},
+		{ButtonName: "A", HelpText: "Select"},
+	}
+	listResult, err := List(listOpts)
+
+	if err != nil {
+		return
+	}
+
+	if len(listResult.Selected) > 0 {
+		newIndex := listResult.Selected[0]
+		if newIndex >= 0 && newIndex < len(item.Options) {
+			selectedOpt := item.Options[newIndex]
+
+			// Handle keyboard option - show keyboard for custom input
+			if selectedOpt.Type == OptionTypeKeyboard {
+				prompt := selectedOpt.KeyboardPrompt
+
+				var keyboardResult *KeyboardResult
+				var kbErr error
+
+				if selectedOpt.KeyboardLayout == KeyboardLayoutURL && len(selectedOpt.URLShortcuts) > 0 {
+					keyboardResult, kbErr = URLKeyboard(prompt, olc.Settings.HelpExitText, URLKeyboardConfig{
+						Shortcuts: selectedOpt.URLShortcuts,
+					})
+				} else {
+					keyboardResult, kbErr = Keyboard(prompt, olc.Settings.HelpExitText, selectedOpt.KeyboardLayout)
+				}
+
+				if kbErr == nil && keyboardResult.Text != "" {
+					enteredText := keyboardResult.Text
+					item.Options[newIndex] = Option{
+						DisplayName:    enteredText,
+						Value:          enteredText,
+						Type:           OptionTypeKeyboard,
+						KeyboardPrompt: selectedOpt.KeyboardPrompt,
+						KeyboardLayout: selectedOpt.KeyboardLayout,
+						URLShortcuts:   selectedOpt.URLShortcuts,
+						Masked:         selectedOpt.Masked,
+						OnUpdate:       selectedOpt.OnUpdate,
+					}
+					item.SelectedOption = newIndex
+
+					if selectedOpt.OnUpdate != nil {
+						selectedOpt.OnUpdate(enteredText)
+					}
+				}
+				return
+			}
+
+			// Standard option - just update selection
+			item.SelectedOption = newIndex
+			if selectedOpt.OnUpdate != nil {
+				selectedOpt.OnUpdate(selectedOpt.Value)
+			}
+		}
+	}
 }
 
 func (olc *optionsListController) cycleOptionLeft() {
