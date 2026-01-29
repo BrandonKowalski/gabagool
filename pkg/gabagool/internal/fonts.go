@@ -1,22 +1,12 @@
 package internal
 
 import (
-	_ "embed"
 	"os"
 
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
-
-//go:embed embedded_fonts/HackGenConsoleNF-Bold.ttf
-var defaultFont []byte
-
-//go:embed embedded_fonts/nextui/RoundedMplus1cNerdFont-Bold.ttf
-var nextUIFont1 []byte
-
-//go:embed embedded_fonts/nextui/BPreplayNerdFont-Bold.ttf
-var nextUIFont2 []byte
 
 // NextUI font configuration
 var (
@@ -127,10 +117,24 @@ func loadFont(fallback string, size int) *ttf.Font {
 	}
 
 	// Use NextUI embedded font if in NextUI mode, otherwise default
+	var embeddedFont []byte
+	var fontType string
 	if isNextUIMode {
-		return loadEmbeddedFont(getNextUIEmbeddedFont(), size)
+		embeddedFont = getNextUIEmbeddedFont()
+		fontType = "NextUI"
+	} else {
+		embeddedFont = defaultFont
+		fontType = "default"
 	}
-	return loadEmbeddedFont(defaultFont, size)
+
+	if embeddedFont == nil {
+		GetInternalLogger().Error("No embedded font available and FALLBACK_FONT not set",
+			"fontType", fontType,
+			"hint", "Set FALLBACK_FONT environment variable or rebuild without the corresponding build tag")
+		os.Exit(1)
+	}
+
+	return loadEmbeddedFont(embeddedFont, size)
 }
 
 func loadEmbeddedFont(bytes []byte, size int) *ttf.Font {
