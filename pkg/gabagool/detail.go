@@ -34,17 +34,18 @@ type DropdownOption struct {
 
 // Section defines a content block in a DetailScreen.
 type Section struct {
-	Type            int              // Section type (SectionTypeSlideshow, etc.)
-	Title           string           // Section header text
-	ImagePaths      []string         // Image paths for slideshow/image sections
-	Metadata        []MetadataItem   // Key-value pairs for info sections
-	Description     string           // Text content for description sections
-	MaxWidth        int32            // Maximum image width (0 = auto)
-	MaxHeight       int32            // Maximum image height (0 = auto)
-	Alignment       int              // Image alignment (cast from constants.TextAlign)
-	DropdownOptions []DropdownOption // Options for dropdown sections
-	DropdownID      string           // Unique identifier for dropdown state
-	DefaultIndex    int              // Initially selected dropdown index
+	Type            int                         // Section type (SectionTypeSlideshow, etc.)
+	Title           string                      // Section header text
+	ImagePaths      []string                    // Image paths for slideshow/image sections
+	Metadata        []MetadataItem              // Key-value pairs for info sections
+	Description     string                      // Text content for description sections
+	MaxWidth        int32                       // Maximum image width (0 = auto)
+	MaxHeight       int32                       // Maximum image height (0 = auto)
+	Alignment       int                         // Image alignment (cast from constants.TextAlign)
+	DropdownOptions []DropdownOption            // Options for dropdown sections
+	DropdownID      string                      // Unique identifier for dropdown state
+	DefaultIndex    int                         // Initially selected dropdown index
+	OnChange        func(option DropdownOption) // Callback when dropdown selection changes
 }
 
 // DetailScreenOptions configures the appearance and behavior of a DetailScreen.
@@ -497,6 +498,9 @@ func (s *detailScreenState) handleExpandedDropdownInput(inputEvent *internal.Eve
 		// Select the highlighted option and collapse
 		expandedState.selectedIndex = expandedState.highlightedIndex
 		expandedState.expanded = false
+		if section.OnChange != nil {
+			section.OnChange(section.DropdownOptions[expandedState.selectedIndex])
+		}
 		return true
 	case constants.VirtualButtonB:
 		// Just collapse without changing selection

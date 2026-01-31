@@ -7,18 +7,28 @@ import (
 	"github.com/veandco/go-sdl2/gfx"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
+	uatomic "go.uber.org/atomic"
 )
 
 // FooterHelpItem represents a button and its help text that should be displayed in the footer.
 // ButtonName is the text that will be displayed in the inner pill.
 // HelpText is the text that will be displayed in the outer pill to the right of the button.
+// HelpTextDynamic is an override that when set takes precedence over HelpText. Useful if labels need to change
 // IsConfirmButton marks this item as the confirm/start button, which can be hidden in multiselect mode when nothing is selected.
 // Show is an optional atomic boolean that controls visibility. When not nil and false, the item is not rendered.
 type FooterHelpItem struct {
 	HelpText        string
+	HelpTextDynamic *uatomic.String
 	ButtonName      string
 	IsConfirmButton bool
 	Show            *atomic.Bool
+}
+
+func (f *FooterHelpItem) GetHelpText() string {
+	if f.HelpTextDynamic != nil {
+		return f.HelpTextDynamic.Load()
+	}
+	return f.HelpText
 }
 
 func renderFooter(
@@ -115,7 +125,7 @@ func calculateContinuousPillWidth(font *ttf.Font, items []FooterHelpItem, outerP
 			continue
 		}
 
-		helpSurface, err := font.RenderUTF8Blended(item.HelpText, internal.GetTheme().AccentColor)
+		helpSurface, err := font.RenderUTF8Blended(item.GetHelpText(), internal.GetTheme().AccentColor)
 		if err != nil || helpSurface == nil {
 			buttonSurface.Free()
 			continue
@@ -181,7 +191,7 @@ func renderGroupAsContinuousPill(
 			continue
 		}
 
-		helpSurface, err := font.RenderUTF8Blended(item.HelpText, internal.GetTheme().HintColor)
+		helpSurface, err := font.RenderUTF8Blended(item.GetHelpText(), internal.GetTheme().HintColor)
 		if err != nil || helpSurface == nil {
 			buttonSurface.Free()
 			continue
