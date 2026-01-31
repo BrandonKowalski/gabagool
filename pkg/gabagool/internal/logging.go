@@ -12,6 +12,7 @@ import (
 var (
 	logFile     *os.File
 	logFilename string
+	logPath     string
 
 	setupOnce   sync.Once
 	multiWriter io.Writer
@@ -25,26 +26,45 @@ var (
 	internalLevelVar   *slog.LevelVar
 )
 
+// SetLogFilename sets the log filename (legacy).
+// Deprecated: Use SetLogPath instead for full path support.
 func SetLogFilename(filename string) {
 	logFilename = filename
 }
 
+// SetLogPath sets the full path for the log file, including filename.
+// Creates all necessary parent directories.
+func SetLogPath(path string) {
+	logPath = path
+}
+
 func setup() {
 	setupOnce.Do(func() {
-		// Try to set up file logging, fall back to console-only on failure
-		if err := os.MkdirAll("logs", 0755); err != nil {
-			// Can't create logs directory, fall back to console-only
-			multiWriter = os.Stdout
-			return
-		}
+		var targetPath string
 
-		filename := logFilename
-		if filename == "" {
-			filename = "app.log"
+		if logPath != "" {
+			// New behavior: use full path, create parent directories
+			targetPath = logPath
+			dir := filepath.Dir(targetPath)
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				multiWriter = os.Stdout
+				return
+			}
+		} else {
+			// Legacy behavior: use "logs" directory with filename
+			if err := os.MkdirAll("logs", 0755); err != nil {
+				multiWriter = os.Stdout
+				return
+			}
+			filename := logFilename
+			if filename == "" {
+				filename = "app.log"
+			}
+			targetPath = filepath.Join("logs", filename)
 		}
 
 		var err error
-		logFile, err = os.OpenFile(filepath.Join("logs", filename), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		logFile, err = os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			// Can't open log file, fall back to console-only
 			multiWriter = os.Stdout

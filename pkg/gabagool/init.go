@@ -26,7 +26,8 @@ type Options struct {
 	IsCannoli            bool                   // Enable Cannoli CFW theming and input handling
 	IsNextUI             bool                   // Enable NextUI CFW theming and power button handling
 	ControllerConfigFile string                 // Path to custom controller mapping file
-	LogFilename          string                 // Log file path (empty for stdout only)
+	LogPath              string                 // Full path for log file including filename (creates parent directories)
+	LogFilename          string                 // Deprecated: Use LogPath instead. Log filename within "logs" directory.
 	FlipFaceButtons      bool                   // Use direct face button mapping (A=A, B=B) instead of Nintendo-style swap
 }
 
@@ -34,7 +35,9 @@ type Options struct {
 // Must be called before any other gabagool functions.
 // If INPUT_CAPTURE environment variable is set, runs the input logger wizard instead.
 func Init(options Options) {
-	if options.LogFilename != "" {
+	if options.LogPath != "" {
+		internal.SetLogPath(options.LogPath)
+	} else if options.LogFilename != "" {
 		internal.SetLogFilename(options.LogFilename)
 	}
 
@@ -92,7 +95,15 @@ func Close() {
 	internal.SDLCleanup()
 }
 
-// SetLogFilename sets the path for the application log file.
+// SetLogPath sets the full path for the log file, including filename.
+// Creates all necessary parent directories.
+// Call before Init() to take effect during initialization.
+func SetLogPath(path string) {
+	internal.SetLogPath(path)
+}
+
+// SetLogFilename sets the filename for the log file within the "logs" directory.
+// Deprecated: Use SetLogPath instead for full path support.
 // Call before Init() to take effect during initialization.
 func SetLogFilename(filename string) {
 	internal.SetLogFilename(filename)
