@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/internal"
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
@@ -25,7 +26,9 @@ type ProcessMessageOptions struct {
 	ShowThemeBackground bool
 	ShowProgressBar     bool
 	Progress            *atomic.Float64
-	ProcessInput        bool // If true, process input events (enables chord/sequence detection)
+	ProcessInput        bool                    // If true, process input events (enables chord/sequence detection)
+	CancelButton        constants.VirtualButton // If set, pressing this button exits with ErrCancelled
+	FooterHelpItems     []FooterHelpItem        // Button hints shown in footer
 }
 
 type processMessage struct {
@@ -39,6 +42,7 @@ type processMessage struct {
 	imageHeight     int32
 	showProgressBar bool
 	progress        *atomic.Float64
+	footerHelpItems []FooterHelpItem
 }
 
 // ProcessMessage displays a message while executing a function asynchronously.
@@ -56,6 +60,7 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 		isProcessing:    true,
 		showProgressBar: options.ShowProgressBar,
 		progress:        options.Progress,
+		footerHelpItems: options.FooterHelpItems,
 	}
 
 	// Load image from bytes (preferred) or from file path (legacy)
@@ -111,6 +116,8 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 	functionComplete := false
 	var quitErr error
 
+	cancelPressed := false
+
 	for running {
 		if event := sdl.WaitEventTimeout(16); event != nil {
 			switch event.(type) {
@@ -118,8 +125,13 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 				running = false
 				quitErr = sdl.GetError()
 			case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
-				if options.ProcessInput {
-					internal.GetInputProcessor().ProcessSDLEvent(event)
+				inputEvent := internal.GetInputProcessor().ProcessSDLEvent(event)
+				// Check if cancel button was pressed
+				if options.CancelButton != constants.VirtualButtonUnassigned && inputEvent != nil && inputEvent.Pressed {
+					if inputEvent.Button == options.CancelButton {
+						cancelPressed = true
+						running = false
+					}
 				}
 			}
 		}
@@ -146,6 +158,11 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 
 	if processor.imageTexture != nil {
 		processor.imageTexture.Destroy()
+	}
+
+	// Check if cancelled via button press
+	if cancelPressed {
+		return result, ErrCancelled
 	}
 
 	// Prioritize function error over quit error
@@ -203,6 +220,10 @@ func (p *processMessage) render(renderer *sdl.Renderer) {
 
 	if p.showProgressBar {
 		p.renderProgressBar(renderer, messageY, spacing)
+	}
+
+	if len(p.footerHelpItems) > 0 {
+		renderFooter(renderer, internal.Fonts.SmallFont, p.footerHelpItems, 30, true, len(p.footerHelpItems) == 1)
 	}
 }
 
