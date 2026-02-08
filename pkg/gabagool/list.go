@@ -195,7 +195,7 @@ func List(options ListOptions) (*ListResult, error) {
 		renderer.SetDrawBlendMode(sdl.BLENDMODE_BLEND)
 
 		lc.render(window)
-		renderer.Present()
+		window.Present()
 	}
 
 	// Update result with final item order (in case items were reordered)

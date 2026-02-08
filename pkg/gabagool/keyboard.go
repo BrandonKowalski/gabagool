@@ -737,7 +737,6 @@ func Keyboard(initialText string, helpExitText string, layout ...KeyboardLayout)
 
 		kb.updateCursorBlink()
 		kb.render(renderer, font)
-		sdl.Delay(16)
 	}
 
 	if kb.EnterPressed {
@@ -785,7 +784,6 @@ func URLKeyboard(initialText string, helpExitText string, config ...URLKeyboardC
 
 		kb.updateCursorBlink()
 		kb.render(renderer, font)
-		sdl.Delay(16)
 	}
 
 	if kb.EnterPressed {
@@ -797,7 +795,10 @@ func URLKeyboard(initialText string, helpExitText string, config ...URLKeyboardC
 func (kb *virtualKeyboard) handleEvents() bool {
 	processor := internal.GetInputProcessor()
 
-	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+	// Wait for first event or timeout at ~60fps, then drain remaining events.
+	// WaitEventTimeout blocks up to 16ms when idle (reduces CPU usage vs PollEvent+Delay).
+	event := sdl.WaitEventTimeout(16)
+	for ; event != nil; event = sdl.PollEvent() {
 		switch event.(type) {
 		case *sdl.QuitEvent:
 			return true
@@ -1149,9 +1150,6 @@ func (kb *virtualKeyboard) render(renderer *sdl.Renderer, font *ttf.Font) {
 
 	if window.Background != nil {
 		window.RenderBackground()
-	} else {
-		renderer.SetDrawColor(0, 0, 0, 255)
-		renderer.Clear()
 	}
 
 	if !kb.ShowingHelp {
@@ -1166,7 +1164,7 @@ func (kb *virtualKeyboard) render(renderer *sdl.Renderer, font *ttf.Font) {
 		kb.helpOverlay.render(renderer, internal.Fonts.SmallFont)
 	}
 
-	renderer.Present()
+	window.Present()
 }
 
 func (kb *virtualKeyboard) renderTextInput(renderer *sdl.Renderer, font *ttf.Font) {

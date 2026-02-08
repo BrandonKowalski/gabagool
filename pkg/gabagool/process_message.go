@@ -97,7 +97,7 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 	renderer := window.Renderer
 
 	processor.render(renderer)
-	renderer.Present()
+	window.Present()
 
 	resultChan := make(chan struct {
 		result T
@@ -153,7 +153,7 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 		}
 
 		processor.render(renderer)
-		renderer.Present()
+		window.Present()
 	}
 
 	if processor.imageTexture != nil {

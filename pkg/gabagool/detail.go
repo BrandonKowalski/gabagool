@@ -11,6 +11,8 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+const detailScrollSpeed = 85
+
 // MetadataItem represents a key-value pair for display in an info section.
 type MetadataItem struct {
 	Label string
@@ -79,33 +81,27 @@ type DetailScreenResult struct {
 }
 
 type detailScreenState struct {
-	window                 *internal.Window
-	renderer               *sdl.Renderer
-	options                DetailScreenOptions
-	footerHelpItems        []FooterHelpItem
-	scrollY                int32
-	targetScrollY          int32
-	maxScrollY             int32
-	scrollSpeed            int32
-	scrollAnimationSpeed   float32
-	lastInputTime          time.Time
-	inputDelay             time.Duration
-	slideshowStates        map[int]slideshowState
-	dropdownStates         map[string]*dropdownState
-	focusedDropdownID      string
-	visibleDropdownID      string
-	textureCache           *internal.TextureCache
-	titleTexture           *sdl.Texture
-	sectionTitleTextures   []*sdl.Texture
-	metadataLabelTextures  map[int][]*sdl.Texture
-	heldDirections         struct{ up, down bool }
-	lastRepeatTime         time.Time
-	repeatDelay            time.Duration
-	repeatInterval         time.Duration
-	result                 DetailScreenResult
-	activeSlideshow        int
-	lastDirectionPressTime time.Time
-	directionTimeout       time.Duration
+	window                *internal.Window
+	renderer              *sdl.Renderer
+	options               DetailScreenOptions
+	footerHelpItems       []FooterHelpItem
+	scrollY               int32
+	targetScrollY         int32
+	maxScrollY            int32
+	scrollAnimationSpeed  float32
+	lastInputTime         time.Time
+	inputDelay            time.Duration
+	slideshowStates       map[int]slideshowState
+	dropdownStates        map[string]*dropdownState
+	focusedDropdownID     string
+	visibleDropdownID     string
+	textureCache          *internal.TextureCache
+	titleTexture          *sdl.Texture
+	sectionTitleTextures  []*sdl.Texture
+	metadataLabelTextures map[int][]*sdl.Texture
+	directionalInput      internal.DirectionalInput
+	result                DetailScreenResult
+	activeSlideshow       int
 }
 
 type slideshowState struct {
@@ -229,7 +225,6 @@ func initializeDetailScreenState(title string, options DetailScreenOptions, foot
 		renderer:              window.Renderer,
 		options:               options,
 		footerHelpItems:       footerHelpItems,
-		scrollSpeed:           85,
 		scrollAnimationSpeed:  0.15,
 		lastInputTime:         time.Now(),
 		inputDelay:            constants.DefaultInputDelay,
@@ -237,10 +232,8 @@ func initializeDetailScreenState(title string, options DetailScreenOptions, foot
 		dropdownStates:        make(map[string]*dropdownState),
 		textureCache:          internal.NewTextureCache(),
 		metadataLabelTextures: make(map[int][]*sdl.Texture),
-		repeatDelay:           time.Millisecond * 150,
-		repeatInterval:        time.Millisecond * 50,
+		directionalInput:      internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 		result:                DetailScreenResult{Action: DetailActionNone},
-		directionTimeout:      time.Millisecond * 200,
 	}
 
 	state.initializeImageDefaults()
@@ -399,7 +392,10 @@ func (s *detailScreenState) isFinished() bool {
 func (s *detailScreenState) handleEvents() {
 	processor := internal.GetInputProcessor()
 
-	if event := sdl.WaitEventTimeout(16); event != nil {
+	// Wait for first event or timeout at ~60fps, then drain remaining events.
+	// WaitEventTimeout blocks up to 16ms when idle (reduces CPU usage vs PollEvent+Delay).
+	event := sdl.WaitEventTimeout(16)
+	for ; event != nil; event = sdl.PollEvent() {
 		switch event.(type) {
 		case *sdl.QuitEvent:
 			s.result.Action = DetailActionCancelled
@@ -407,7 +403,7 @@ func (s *detailScreenState) handleEvents() {
 		case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
 			inputEvent := processor.ProcessSDLEvent(event.(sdl.Event))
 			if inputEvent == nil {
-				return
+				continue
 			}
 
 			if inputEvent.Pressed {
@@ -535,12 +531,7 @@ func (s *detailScreenState) handleDropdownActivation() bool {
 }
 
 func (s *detailScreenState) handleInputEventRelease(inputEvent *internal.Event) {
-	switch inputEvent.Button {
-	case constants.VirtualButtonUp:
-		s.heldDirections.up = false
-	case constants.VirtualButtonDown:
-		s.heldDirections.down = false
-	}
+	s.directionalInput.SetHeld(inputEvent.Button, false)
 }
 
 func (s *detailScreenState) isInputAllowed() bool {
@@ -549,16 +540,14 @@ func (s *detailScreenState) isInputAllowed() bool {
 
 func (s *detailScreenState) startScrolling(up bool) {
 	if up {
-		s.heldDirections.up = true
-		s.heldDirections.down = false
-		s.targetScrollY = internal.Max32(0, s.targetScrollY-s.scrollSpeed)
+		s.directionalInput.SetHeld(constants.VirtualButtonUp, true)
+		s.directionalInput.SetHeld(constants.VirtualButtonDown, false)
+		s.targetScrollY = internal.Max32(0, s.targetScrollY-detailScrollSpeed)
 	} else {
-		s.heldDirections.down = true
-		s.heldDirections.up = false
-		s.targetScrollY = internal.Min32(s.maxScrollY, s.targetScrollY+s.scrollSpeed)
+		s.directionalInput.SetHeld(constants.VirtualButtonDown, true)
+		s.directionalInput.SetHeld(constants.VirtualButtonUp, false)
+		s.targetScrollY = internal.Min32(s.maxScrollY, s.targetScrollY+detailScrollSpeed)
 	}
-	s.lastRepeatTime = time.Now()
-	s.lastDirectionPressTime = time.Now()
 }
 
 func (s *detailScreenState) handleSlideshowNavigation(isLeft bool) {
@@ -585,32 +574,12 @@ func (s *detailScreenState) update() {
 }
 
 func (s *detailScreenState) handleDirectionalRepeats() {
-	now := time.Now()
-
-	// Reset held directions if no input received recently (handles missing release events)
-	if now.Sub(s.lastDirectionPressTime) > s.directionTimeout {
-		s.heldDirections.up = false
-		s.heldDirections.down = false
-		return
-	}
-
-	timeSinceLastRepeat := now.Sub(s.lastRepeatTime)
-
-	if timeSinceLastRepeat < s.repeatDelay {
-		return
-	}
-	if s.repeatInterval > 0 && timeSinceLastRepeat < s.repeatInterval {
-		return
-	}
-
-	if s.heldDirections.up {
-		s.targetScrollY = internal.Max32(0, s.targetScrollY-s.scrollSpeed)
-		s.lastRepeatTime = now
-		s.lastDirectionPressTime = now
-	} else if s.heldDirections.down {
-		s.targetScrollY = internal.Min32(s.maxScrollY, s.targetScrollY+s.scrollSpeed)
-		s.lastRepeatTime = now
-		s.lastDirectionPressTime = now
+	dir := s.directionalInput.Update()
+	switch dir {
+	case internal.DirectionUp:
+		s.targetScrollY = internal.Max32(0, s.targetScrollY-detailScrollSpeed)
+	case internal.DirectionDown:
+		s.targetScrollY = internal.Min32(s.maxScrollY, s.targetScrollY+detailScrollSpeed)
 	}
 }
 
@@ -632,7 +601,7 @@ func (s *detailScreenState) render() {
 	s.renderScrollbar(safeAreaHeight)
 	s.renderFooter(margins)
 
-	s.renderer.Present()
+	s.window.Present()
 }
 
 func (s *detailScreenState) clearScreen() {

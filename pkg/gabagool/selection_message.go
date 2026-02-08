@@ -251,7 +251,7 @@ func (c *selectionMessageController) render(renderer *sdl.Renderer, window *inte
 		true,
 	)
 
-	renderer.Present()
+	window.Present()
 }
 
 func (c *selectionMessageController) calculateTextHeight(text string, font *ttf.Font, maxWidth int32) int32 {

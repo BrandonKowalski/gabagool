@@ -226,7 +226,7 @@ func renderFrame(renderer *sdl.Renderer, window *internal.Window, settings confi
 		true,
 	)
 
-	renderer.Present()
+	window.Present()
 }
 
 func calculateContentHeight(settings confirmationMessageSettings, imageRect sdl.Rect) int32 {

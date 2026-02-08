@@ -85,7 +85,8 @@ func InputLogger() *internal.InputMapping {
 	running := true
 
 	for running {
-		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+		event := sdl.WaitEventTimeout(16)
+		for ; event != nil; event = sdl.PollEvent() {
 			switch event.(type) {
 			case *sdl.QuitEvent:
 				running = false
@@ -95,7 +96,6 @@ func InputLogger() *internal.InputMapping {
 		}
 
 		logger.render()
-		sdl.Delay(16)
 	}
 
 	return logger.buildMapping()
@@ -299,7 +299,7 @@ func (il *inputLoggerController) render() {
 		il.renderText(renderer, escapeHint, internal.GetWindow().GetWidth()/2, internal.GetWindow().GetHeight()-80, true)
 	}
 
-	renderer.Present()
+	internal.GetWindow().Present()
 }
 
 // buildMapping converts the collected button mappings into an InputMapping struct

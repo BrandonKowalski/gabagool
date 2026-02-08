@@ -21,6 +21,8 @@ type Window struct {
 	DisplayBackground bool
 	PowerButtonWG     sync.WaitGroup
 	PowerButtonConfig PowerButtonConfig
+	hasVSync          bool
+	lastPresentTime   uint64
 }
 
 func initWindow(title string, displayBackground bool, winOpts WindowOptions) *Window {
@@ -85,11 +87,15 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 
 	renderer.SetLogicalSize(width, height)
 
+	info, err := renderer.GetInfo()
+	vsync := err == nil && info.Flags&sdl.RENDERER_PRESENTVSYNC != 0
+
 	win := &Window{
 		Window:            window,
 		Renderer:          renderer,
 		Title:             title,
 		DisplayBackground: displayBackground,
+		hasVSync:          vsync,
 	}
 
 	win.loadBackground()
@@ -147,6 +153,19 @@ func (window *Window) GetHeight() int32 {
 func (window *Window) RenderBackground() {
 	if window.Background != nil {
 		window.Renderer.Copy(window.Background, nil, &sdl.Rect{X: 0, Y: 0, W: window.GetWidth(), H: window.GetHeight()})
+	}
+}
+
+// Present swaps the render buffer and enforces ~60fps frame timing
+// when VSync is not available. Use this instead of renderer.Present().
+func (w *Window) Present() {
+	w.Renderer.Present()
+	if !w.hasVSync {
+		now := sdl.GetTicks64()
+		if elapsed := now - w.lastPresentTime; elapsed < 16 {
+			sdl.Delay(uint32(16 - elapsed))
+		}
+		w.lastPresentTime = sdl.GetTicks64()
 	}
 }
 

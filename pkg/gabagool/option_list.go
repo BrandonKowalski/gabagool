@@ -338,7 +338,7 @@ func OptionsList(title string, listOptions OptionListSettings, items []ItemWithO
 			optionsListController.render(renderer)
 		}
 
-		renderer.Present()
+		window.Present()
 	}
 
 	if err != nil {

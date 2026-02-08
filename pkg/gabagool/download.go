@@ -160,7 +160,7 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 	downloadManager.startNextDownloads()
 
 	downloadManager.render(renderer)
-	renderer.Present()
+	window.Present()
 
 	running := true
 	var err error
@@ -206,7 +206,7 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 		}
 
 		downloadManager.render(renderer)
-		renderer.Present()
+		window.Present()
 	}
 
 	if err != nil {
