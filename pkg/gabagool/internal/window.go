@@ -98,6 +98,16 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 		hasVSync:          vsync,
 	}
 
+	// Render a few blank frames to synchronize the display pipeline.
+	// On devices like the Miyoo Mini Flip, the framebuffer's page-flip
+	// state can be out of sync after a previous app exits, causing
+	// visible tearing on the next launch.
+	for range 3 {
+		renderer.SetDrawColor(0, 0, 0, 255)
+		renderer.Clear()
+		renderer.Present()
+	}
+
 	win.loadBackground()
 
 	return win

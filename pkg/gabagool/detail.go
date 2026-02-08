@@ -570,7 +570,22 @@ func (s *detailScreenState) findActiveSlideshow() int {
 
 func (s *detailScreenState) update() {
 	s.handleDirectionalRepeats()
-	s.scrollY += int32(float32(s.targetScrollY-s.scrollY) * s.scrollAnimationSpeed)
+
+	diff := s.targetScrollY - s.scrollY
+	if diff == 0 {
+		return
+	}
+	step := int32(float32(diff) * s.scrollAnimationSpeed)
+	if step == 0 {
+		// Snap toward target when the lerp delta rounds to zero,
+		// preventing the scroll from getting stuck near the target.
+		if diff > 0 {
+			step = 1
+		} else {
+			step = -1
+		}
+	}
+	s.scrollY += step
 }
 
 func (s *detailScreenState) handleDirectionalRepeats() {
