@@ -343,7 +343,28 @@ func (s *detailScreenState) loadAndScaleImage(imagePath string, maxWidth, maxHei
 	defer image.Free()
 
 	imageW, imageH := s.calculateScaledDimensions(image.W, image.H, maxWidth, maxHeight)
-	texture, err := s.renderer.CreateTextureFromSurface(image)
+
+	// Scale the surface down before creating the GPU texture to avoid
+	// exhausting GPU texture memory on devices with limited VRAM (e.g. ARM7).
+	var textureSurface *sdl.Surface
+	if imageW < image.W || imageH < image.H {
+		scaled, err := sdl.CreateRGBSurfaceWithFormat(0, imageW, imageH, 32, image.Format.Format)
+		if err == nil {
+			dstRect := sdl.Rect{X: 0, Y: 0, W: imageW, H: imageH}
+			if err := image.BlitScaled(nil, scaled, &dstRect); err == nil {
+				textureSurface = scaled
+			} else {
+				scaled.Free()
+			}
+		}
+	}
+	if textureSurface == nil {
+		textureSurface = image
+	} else {
+		defer textureSurface.Free()
+	}
+
+	texture, err := s.renderer.CreateTextureFromSurface(textureSurface)
 	if err != nil {
 		return nil, sdl.Rect{}
 	}
