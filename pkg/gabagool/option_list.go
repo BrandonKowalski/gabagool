@@ -9,6 +9,7 @@ import (
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/internal"
 	"github.com/veandco/go-sdl2/sdl"
+	"github.com/veandco/go-sdl2/ttf"
 )
 
 type OptionType int
@@ -141,9 +142,10 @@ type optionsListController struct {
 	helpOverlay *helpOverlay
 	ShowingHelp bool
 
-	itemScrollData       map[int]*internal.TextScrollData
-	showingColorPicker   bool
-	activeColorPickerIdx int
+	itemScrollData        map[int]*internal.TextScrollData
+	optionValueScrollData map[int]*internal.TextScrollData
+	showingColorPicker    bool
+	activeColorPickerIdx  int
 
 	directionalInput internal.DirectionalInput
 }
@@ -234,15 +236,16 @@ func newOptionsListController(title string, items []ItemWithOptions) *optionsLis
 	}
 
 	return &optionsListController{
-		Items:                items,
-		SelectedIndex:        selectedIndex,
-		Settings:             defaultOptionsListSettings(title),
-		StartY:               20,
-		lastInputTime:        time.Now(),
-		itemScrollData:       make(map[int]*internal.TextScrollData),
-		showingColorPicker:   false,
-		activeColorPickerIdx: -1,
-		directionalInput:     internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
+		Items:                 items,
+		SelectedIndex:         selectedIndex,
+		Settings:              defaultOptionsListSettings(title),
+		StartY:                20,
+		lastInputTime:         time.Now(),
+		itemScrollData:        make(map[int]*internal.TextScrollData),
+		optionValueScrollData: make(map[int]*internal.TextScrollData),
+		showingColorPicker:    false,
+		activeColorPickerIdx:  -1,
+		directionalInput:      internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 	}
 }
 
@@ -632,6 +635,9 @@ func (olc *optionsListController) moveSelection(direction int) {
 	}
 
 	startIndex := olc.SelectedIndex
+	// Reset scroll data for the item we're leaving
+	delete(olc.itemScrollData, olc.SelectedIndex)
+	delete(olc.optionValueScrollData, olc.SelectedIndex)
 	olc.Items[olc.SelectedIndex].Item.Selected = false
 
 	// Find next visible item in the given direction
@@ -802,6 +808,9 @@ func (olc *optionsListController) cycleOptionLeft() {
 		item.SelectedOption = len(item.Options) - 1
 	}
 
+	// Reset scroll data when option value changes
+	delete(olc.optionValueScrollData, olc.SelectedIndex)
+
 	currentOption := item.Options[item.SelectedOption]
 	if currentOption.OnUpdate != nil {
 		currentOption.OnUpdate(currentOption.Value)
@@ -826,6 +835,9 @@ func (olc *optionsListController) cycleOptionRight() {
 	if item.SelectedOption >= len(item.Options) {
 		item.SelectedOption = 0
 	}
+
+	// Reset scroll data when option value changes
+	delete(olc.optionValueScrollData, olc.SelectedIndex)
 
 	currentOption := item.Options[item.SelectedOption]
 	if currentOption.OnUpdate != nil {
@@ -974,66 +986,82 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 		// Calculate vertical center within selection rect
 		selectionRectY := itemY - 5
 
-		itemSurface, _ := font.RenderUTF8Blended(item.Item.Text, textColor)
-		if itemSurface != nil {
-			defer itemSurface.Free()
-			itemTexture, _ := renderer.CreateTextureFromSurface(itemSurface)
-			if itemTexture != nil {
-				defer itemTexture.Destroy()
-				renderer.Copy(itemTexture, nil, &sdl.Rect{
-					X: olc.Settings.Margins.Left,
-					Y: selectionRectY + (selectionRectHeight-itemSurface.H)/2,
-					W: itemSurface.W,
-					H: itemSurface.H,
-				})
+		// Render item label, constrained to half the content width
+		maxLabelWidth := (window.GetWidth() - olc.Settings.Margins.Left - olc.Settings.Margins.Right) / 2
+
+		if item.Item.Selected && olc.textExceedsWidth(font, item.Item.Text, maxLabelWidth) {
+			// Selected and overflowing: scroll the label
+			scrollData := olc.getOrCreateScrollData(olc.itemScrollData, itemIndex, item.Item.Text, font, maxLabelWidth)
+			olc.updateScrollData(scrollData, time.Now())
+
+			itemSurface, _ := font.RenderUTF8Blended(item.Item.Text, textColor)
+			if itemSurface != nil {
+				defer itemSurface.Free()
+				itemTexture, _ := renderer.CreateTextureFromSurface(itemSurface)
+				if itemTexture != nil {
+					defer itemTexture.Destroy()
+
+					clipWidth := internal.Min32(maxLabelWidth, itemSurface.W-scrollData.ScrollOffset)
+					clipRect := &sdl.Rect{
+						X: scrollData.ScrollOffset,
+						Y: 0,
+						W: clipWidth,
+						H: itemSurface.H,
+					}
+					renderer.Copy(itemTexture, clipRect, &sdl.Rect{
+						X: olc.Settings.Margins.Left,
+						Y: selectionRectY + (selectionRectHeight-itemSurface.H)/2,
+						W: clipWidth,
+						H: itemSurface.H,
+					})
+				}
+			}
+		} else {
+			// Not selected or fits: truncate if needed and render
+			displayText := olc.truncateText(font, item.Item.Text, maxLabelWidth)
+			itemSurface, _ := font.RenderUTF8Blended(displayText, textColor)
+			if itemSurface != nil {
+				defer itemSurface.Free()
+				itemTexture, _ := renderer.CreateTextureFromSurface(itemSurface)
+				if itemTexture != nil {
+					defer itemTexture.Destroy()
+					renderer.Copy(itemTexture, nil, &sdl.Rect{
+						X: olc.Settings.Margins.Left,
+						Y: selectionRectY + (selectionRectHeight-itemSurface.H)/2,
+						W: itemSurface.W,
+						H: itemSurface.H,
+					})
+				}
 			}
 		}
 
 		if len(item.Options) > 0 {
 			selectedOption := item.Options[item.SelectedOption]
 
+			// Calculate max width for option values based on label width
+			contentWidth := window.GetWidth() - olc.Settings.Margins.Left - olc.Settings.Margins.Right
+			gap := int32(float32(40) * scaleFactor)
+			// The label is capped at maxLabelWidth, so use the min of actual and max
+			labelWidth := olc.measureTextWidth(font, item.Item.Text)
+			if labelWidth > maxLabelWidth {
+				labelWidth = maxLabelWidth
+			}
+			maxOptionWidth := contentWidth - labelWidth - gap
+			if maxOptionWidth < contentWidth/4 {
+				maxOptionWidth = contentWidth / 4
+			}
+			rightEdgeX := window.GetWidth() - olc.Settings.Margins.Right
+
 			if selectedOption.Type == OptionTypeKeyboard {
 				var indicatorText string
-
 				if selectedOption.Masked {
 					indicatorText = strings.Repeat("*", len(selectedOption.DisplayName))
 				} else {
 					indicatorText = selectedOption.DisplayName
 				}
-
-				optionSurface, _ := font.RenderUTF8Blended(indicatorText, textColor)
-				if optionSurface != nil {
-					defer optionSurface.Free()
-					optionTexture, _ := renderer.CreateTextureFromSurface(optionSurface)
-					if optionTexture != nil {
-						defer optionTexture.Destroy()
-
-						renderer.Copy(optionTexture, nil, &sdl.Rect{
-							X: window.GetWidth() - olc.Settings.Margins.Right - optionSurface.W,
-							Y: selectionRectY + (selectionRectHeight-optionSurface.H)/2,
-							W: optionSurface.W,
-							H: optionSurface.H,
-						})
-					}
-				}
+				olc.renderOptionValue(renderer, font, indicatorText, textColor, itemIndex, item.Item.Selected, maxOptionWidth, rightEdgeX, selectionRectY, selectionRectHeight)
 			} else if selectedOption.Type == OptionTypeClickable {
-				indicatorText := selectedOption.DisplayName
-
-				optionSurface, _ := font.RenderUTF8Blended(indicatorText, textColor)
-				if optionSurface != nil {
-					defer optionSurface.Free()
-					optionTexture, _ := renderer.CreateTextureFromSurface(optionSurface)
-					if optionTexture != nil {
-						defer optionTexture.Destroy()
-
-						renderer.Copy(optionTexture, nil, &sdl.Rect{
-							X: window.GetWidth() - olc.Settings.Margins.Right - optionSurface.W,
-							Y: selectionRectY + (selectionRectHeight-optionSurface.H)/2,
-							W: optionSurface.W,
-							H: optionSurface.H,
-						})
-					}
-				}
+				olc.renderOptionValue(renderer, font, selectedOption.DisplayName, textColor, itemIndex, item.Item.Selected, maxOptionWidth, rightEdgeX, selectionRectY, selectionRectHeight)
 			} else if selectedOption.Type == OptionTypeColorPicker {
 				// For color picker option, display the color swatch and hex value
 				indicatorText := selectedOption.DisplayName
@@ -1058,7 +1086,7 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 						swatchSpacing := int32(float32(10) * scaleFactor)     // Scale spacing
 
 						// Position swatch on the right
-						swatchX := window.GetWidth() - olc.Settings.Margins.Right - swatchWidth
+						swatchX := rightEdgeX - swatchWidth
 
 						// Position the text to the left of the swatch
 						textX := swatchX - optionSurface.W - swatchSpacing
@@ -1081,43 +1109,22 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 						if color, ok := selectedOption.Value.(sdl.Color); ok {
 							swatchRect := &sdl.Rect{
 								X: swatchX,
-								Y: swatchY, // Centered vertically
+								Y: swatchY,
 								W: swatchWidth,
 								H: swatchHeight,
 							}
 
-							// Save current color
 							r, g, b, a, _ := renderer.GetDrawColor()
-
-							// draw color swatch
 							renderer.SetDrawColor(color.R, color.G, color.B, color.A)
 							renderer.FillRect(swatchRect)
-
-							// draw swatch border
 							renderer.SetDrawColor(255, 255, 255, 255)
 							renderer.DrawRect(swatchRect)
-
-							// Restore previous color
 							renderer.SetDrawColor(r, g, b, a)
 						}
 					}
 				}
 			} else {
-				optionSurface, _ := font.RenderUTF8Blended(selectedOption.DisplayName, textColor)
-				if optionSurface != nil {
-					defer optionSurface.Free()
-					optionTexture, _ := renderer.CreateTextureFromSurface(optionSurface)
-					if optionTexture != nil {
-						defer optionTexture.Destroy()
-
-						renderer.Copy(optionTexture, nil, &sdl.Rect{
-							X: window.GetWidth() - olc.Settings.Margins.Right - optionSurface.W,
-							Y: selectionRectY + (selectionRectHeight-optionSurface.H)/2,
-							W: optionSurface.W,
-							H: optionSurface.H,
-						})
-					}
-				}
+				olc.renderOptionValue(renderer, font, selectedOption.DisplayName, textColor, itemIndex, item.Item.Selected, maxOptionWidth, rightEdgeX, selectionRectY, selectionRectHeight)
 			}
 		}
 
@@ -1132,4 +1139,149 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 		true,
 		true,
 	)
+}
+
+func (olc *optionsListController) renderOptionValue(
+	renderer *sdl.Renderer,
+	font *ttf.Font,
+	text string,
+	textColor sdl.Color,
+	itemIndex int,
+	selected bool,
+	maxWidth int32,
+	rightEdgeX int32,
+	selectionRectY int32,
+	selectionRectHeight int32,
+) {
+	if text == "" {
+		return
+	}
+
+	if selected && olc.textExceedsWidth(font, text, maxWidth) {
+		scrollData := olc.getOrCreateScrollData(olc.optionValueScrollData, itemIndex, text, font, maxWidth)
+		olc.updateScrollData(scrollData, time.Now())
+
+		optionSurface, _ := font.RenderUTF8Blended(text, textColor)
+		if optionSurface != nil {
+			defer optionSurface.Free()
+			optionTexture, _ := renderer.CreateTextureFromSurface(optionSurface)
+			if optionTexture != nil {
+				defer optionTexture.Destroy()
+
+				clipWidth := internal.Min32(maxWidth, optionSurface.W-scrollData.ScrollOffset)
+				clipRect := &sdl.Rect{
+					X: scrollData.ScrollOffset,
+					Y: 0,
+					W: clipWidth,
+					H: optionSurface.H,
+				}
+
+				renderer.Copy(optionTexture, clipRect, &sdl.Rect{
+					X: rightEdgeX - clipWidth,
+					Y: selectionRectY + (selectionRectHeight-optionSurface.H)/2,
+					W: clipWidth,
+					H: optionSurface.H,
+				})
+			}
+		}
+	} else {
+		displayText := olc.truncateText(font, text, maxWidth)
+		optionSurface, _ := font.RenderUTF8Blended(displayText, textColor)
+		if optionSurface != nil {
+			defer optionSurface.Free()
+			optionTexture, _ := renderer.CreateTextureFromSurface(optionSurface)
+			if optionTexture != nil {
+				defer optionTexture.Destroy()
+
+				renderer.Copy(optionTexture, nil, &sdl.Rect{
+					X: rightEdgeX - optionSurface.W,
+					Y: selectionRectY + (selectionRectHeight-optionSurface.H)/2,
+					W: optionSurface.W,
+					H: optionSurface.H,
+				})
+			}
+		}
+	}
+}
+
+func (olc *optionsListController) measureTextWidth(font *ttf.Font, text string) int32 {
+	surface, _ := font.RenderUTF8Blended(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
+	if surface == nil {
+		return 0
+	}
+	defer surface.Free()
+	return surface.W
+}
+
+func (olc *optionsListController) textExceedsWidth(font *ttf.Font, text string, maxWidth int32) bool {
+	surface, _ := font.RenderUTF8Blended(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
+	if surface == nil {
+		return false
+	}
+	defer surface.Free()
+	return surface.W > maxWidth
+}
+
+func (olc *optionsListController) truncateText(font *ttf.Font, text string, maxWidth int32) string {
+	if !olc.textExceedsWidth(font, text, maxWidth) {
+		return text
+	}
+
+	ellipsis := "..."
+	runes := []rune(text)
+	for len(runes) > 5 {
+		runes = runes[:len(runes)-1]
+		testText := string(runes) + ellipsis
+		if !olc.textExceedsWidth(font, testText, maxWidth) {
+			return testText
+		}
+	}
+	return ellipsis
+}
+
+func (olc *optionsListController) getOrCreateScrollData(scrollMap map[int]*internal.TextScrollData, index int, text string, font *ttf.Font, maxWidth int32) *internal.TextScrollData {
+	data, exists := scrollMap[index]
+	if !exists {
+		surface, _ := font.RenderUTF8Blended(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
+		if surface == nil {
+			return &internal.TextScrollData{}
+		}
+		defer surface.Free()
+
+		data = &internal.TextScrollData{
+			NeedsScrolling: surface.W > maxWidth,
+			TextWidth:      surface.W,
+			ContainerWidth: maxWidth,
+			Direction:      1,
+		}
+		scrollMap[index] = data
+	}
+	return data
+}
+
+func (olc *optionsListController) updateScrollData(data *internal.TextScrollData, currentTime time.Time) {
+	pauseTime := 1500 * time.Millisecond
+	if data.LastDirectionChange != nil && currentTime.Sub(*data.LastDirectionChange) < pauseTime {
+		return
+	}
+
+	scrollIncrement := int32(2)
+	data.ScrollOffset += int32(data.Direction) * scrollIncrement
+
+	maxOffset := data.TextWidth - data.ContainerWidth
+	if data.ScrollOffset <= 0 {
+		data.ScrollOffset = 0
+		if data.Direction < 0 {
+			data.Direction = 1
+			now := currentTime
+			data.LastDirectionChange = &now
+		}
+	} else if data.ScrollOffset >= maxOffset {
+		data.ScrollOffset = maxOffset
+		if data.Direction > 0 {
+			data.Direction = -1
+			now := currentTime
+			data.LastDirectionChange = &now
+		}
+	}
 }
