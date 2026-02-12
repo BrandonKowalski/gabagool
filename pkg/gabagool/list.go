@@ -47,6 +47,7 @@ type ListOptions struct {
 	ReorderButton            constants.VirtualButton // Button to enter reorder mode
 	ActionButton             constants.VirtualButton // Primary action button (triggers ListActionTriggered)
 	SecondaryActionButton    constants.VirtualButton // Secondary action (triggers ListActionSecondaryTriggered)
+	TertiaryActionButton     constants.VirtualButton // Tertiary action (triggers ListActionTertiaryTriggered)
 	HelpButton               constants.VirtualButton // Button to show help overlay
 	SelectAllButton          constants.VirtualButton // Button to select all items
 	DeselectAllButton        constants.VirtualButton // Button to deselect all items
@@ -77,6 +78,7 @@ func DefaultListOptions(title string, items []MenuItem) ListOptions {
 		ReorderButton:            constants.VirtualButtonUnassigned,
 		ActionButton:             constants.VirtualButtonUnassigned,
 		SecondaryActionButton:    constants.VirtualButtonUnassigned,
+		TertiaryActionButton:     constants.VirtualButtonUnassigned,
 		HelpButton:               constants.VirtualButtonUnassigned,
 		SelectAllButton:          constants.VirtualButtonUnassigned,
 		DeselectAllButton:        constants.VirtualButtonUnassigned,
@@ -281,7 +283,8 @@ func (lc *listController) handleActionButtons(button constants.VirtualButton, ru
 		button != constants.VirtualButtonB &&
 		button != constants.VirtualButtonMenu &&
 		button != lc.Options.ActionButton &&
-		button != lc.Options.SecondaryActionButton {
+		button != lc.Options.SecondaryActionButton &&
+		button != lc.Options.TertiaryActionButton {
 		return
 	}
 
@@ -327,6 +330,24 @@ func (lc *listController) handleActionButtons(button constants.VirtualButton, ru
 		button == lc.Options.SecondaryActionButton {
 		*running = false
 		result.Action = ListActionSecondaryTriggered
+		if len(lc.Options.Items) > 0 {
+			if lc.MultiSelect {
+				if indices := lc.getSelectedItems(); len(indices) > 0 {
+					result.Selected = indices
+					result.VisiblePosition = indices[0] - lc.Options.VisibleStartIndex
+				}
+			} else {
+				result.Selected = []int{lc.Options.SelectedIndex}
+				result.VisiblePosition = lc.Options.SelectedIndex - lc.Options.VisibleStartIndex
+			}
+		}
+	}
+
+	// Tertiary action button handling
+	if lc.Options.TertiaryActionButton != constants.VirtualButtonUnassigned &&
+		button == lc.Options.TertiaryActionButton {
+		*running = false
+		result.Action = ListActionTertiaryTriggered
 		if len(lc.Options.Items) > 0 {
 			if lc.MultiSelect {
 				if indices := lc.getSelectedItems(); len(indices) > 0 {

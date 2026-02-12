@@ -8,6 +8,7 @@ const (
 	ListActionTriggered                            // User triggered action button (X button)
 	ListActionSecondaryTriggered                   // User triggered secondary action (Y button)
 	ListActionConfirmed                            // User confirmed selection (Start button)
+	ListActionTertiaryTriggered                    // User triggered tertiary action (Menu button)
 )
 
 // DetailAction represents user actions that can occur within a Detail component.

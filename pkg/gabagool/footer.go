@@ -10,6 +10,14 @@ import (
 	uatomic "go.uber.org/atomic"
 )
 
+type FooterGroup int
+
+const (
+	FooterGroupAuto  FooterGroup = iota // Default, uses count-based left/right split
+	FooterGroupLeft                     // Explicitly renders on the left
+	FooterGroupRight                    // Explicitly renders on the right
+)
+
 // FooterHelpItem represents a button and its help text that should be displayed in the footer.
 // ButtonName is the text that will be displayed in the inner pill.
 // HelpText is the text that will be displayed in the outer pill to the right of the button.
@@ -22,6 +30,7 @@ type FooterHelpItem struct {
 	ButtonName      string
 	IsConfirmButton bool
 	Show            *atomic.Bool
+	Group           FooterGroup
 }
 
 func (f *FooterHelpItem) GetHelpText() string {
@@ -77,24 +86,44 @@ func renderFooter(
 	}
 
 	innerPillMargin := int32(float32(6) * scaleFactor)
-	var leftItems []FooterHelpItem
-	var rightItems []FooterHelpItem
-	switch len(footerHelpItems) {
-	case 1:
-		// For a single item, center it
-		leftItems = footerHelpItems[0:1]
-	case 2:
-		leftItems = footerHelpItems[0:1]
-		rightItems = footerHelpItems[1:2]
-	case 3:
-		leftItems = footerHelpItems[0:2]
-		rightItems = footerHelpItems[2:3]
-	case 4, 5, 6:
-		leftItems = footerHelpItems[0:2]
-		rightItems = footerHelpItems[2:min(4, len(footerHelpItems))]
-	default:
-		leftItems = footerHelpItems[0:2]
-		rightItems = footerHelpItems[2:4]
+	var leftItems, rightItems []FooterHelpItem
+
+	// Check if any items have explicit group assignments
+	hasExplicitGroups := false
+	for _, item := range footerHelpItems {
+		if item.Group != FooterGroupAuto {
+			hasExplicitGroups = true
+			break
+		}
+	}
+
+	if hasExplicitGroups {
+		// Partition by explicit group; auto items go to left
+		for _, item := range footerHelpItems {
+			if item.Group == FooterGroupRight {
+				rightItems = append(rightItems, item)
+			} else {
+				leftItems = append(leftItems, item)
+			}
+		}
+	} else {
+		// Legacy count-based split
+		switch len(footerHelpItems) {
+		case 1:
+			leftItems = footerHelpItems[0:1]
+		case 2:
+			leftItems = footerHelpItems[0:1]
+			rightItems = footerHelpItems[1:2]
+		case 3:
+			leftItems = footerHelpItems[0:2]
+			rightItems = footerHelpItems[2:3]
+		case 4, 5, 6:
+			leftItems = footerHelpItems[0:2]
+			rightItems = footerHelpItems[2:min(4, len(footerHelpItems))]
+		default:
+			leftItems = footerHelpItems[0:2]
+			rightItems = footerHelpItems[2:4]
+		}
 	}
 
 	if len(leftItems) > 0 {
