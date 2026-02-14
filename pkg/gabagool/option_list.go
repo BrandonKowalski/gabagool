@@ -986,8 +986,38 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 		// Calculate vertical center within selection rect
 		selectionRectY := itemY - 5
 
-		// Render item label, constrained to half the content width
-		maxLabelWidth := (window.GetWidth() - olc.Settings.Margins.Left - olc.Settings.Margins.Right) / 2
+		// Calculate layout widths for label and value
+		contentWidth := window.GetWidth() - olc.Settings.Margins.Left - olc.Settings.Margins.Right
+		gap := int32(float32(40) * scaleFactor)
+		var maxLabelWidth int32
+		if len(item.Options) > 0 {
+			selOpt := item.Options[item.SelectedOption]
+			valueText := selOpt.DisplayName
+			if selOpt.Type == OptionTypeKeyboard && selOpt.Masked {
+				valueText = strings.Repeat("*", len(selOpt.DisplayName))
+			}
+			valueWidth := olc.measureTextWidth(font, valueText)
+			actualLabelWidth := olc.measureTextWidth(font, item.Item.Text)
+			availableForBoth := contentWidth - gap
+			if actualLabelWidth+valueWidth <= availableForBoth {
+				// Both fit naturally, no constraints needed
+				maxLabelWidth = actualLabelWidth
+			} else {
+				halfAvailable := availableForBoth / 2
+				if valueWidth <= halfAvailable {
+					// Value is short, give label the remaining space
+					maxLabelWidth = availableForBoth - valueWidth
+				} else if actualLabelWidth <= halfAvailable {
+					// Label is short, no need to constrain it
+					maxLabelWidth = actualLabelWidth
+				} else {
+					// Both are long, split evenly
+					maxLabelWidth = halfAvailable
+				}
+			}
+		} else {
+			maxLabelWidth = contentWidth
+		}
 
 		if item.Item.Selected && olc.textExceedsWidth(font, item.Item.Text, maxLabelWidth) {
 			// Selected and overflowing: scroll the label
@@ -1038,9 +1068,6 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 		if len(item.Options) > 0 {
 			selectedOption := item.Options[item.SelectedOption]
 
-			// Calculate max width for option values based on label width
-			contentWidth := window.GetWidth() - olc.Settings.Margins.Left - olc.Settings.Margins.Right
-			gap := int32(float32(40) * scaleFactor)
 			// The label is capped at maxLabelWidth, so use the min of actual and max
 			labelWidth := olc.measureTextWidth(font, item.Item.Text)
 			if labelWidth > maxLabelWidth {
