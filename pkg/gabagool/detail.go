@@ -268,7 +268,10 @@ func (s *detailScreenState) loadTextures(title string) {
 		if section.Type == SectionTypeInfo {
 			labelTextures := make([]*sdl.Texture, len(section.Metadata))
 			for j, item := range section.Metadata {
-				labelTextures[j] = renderText(s.renderer, item.Label+":", internal.Fonts.SmallFont, s.options.MetadataColor)
+				if item.Label != "" && item.Value != "" {
+					item.Label = item.Label + ":"
+				}
+				labelTextures[j] = renderText(s.renderer, item.Label, internal.Fonts.SmallFont, s.options.MetadataColor)
 			}
 			s.metadataLabelTextures[i] = labelTextures
 		}
