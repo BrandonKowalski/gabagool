@@ -86,7 +86,12 @@ func InitStaticNextVal(filePath string) (*NextVal, error) {
 }
 
 func loadNextVal() (*NextVal, error) {
-	execPath := "/mnt/SDCARD/.system/tg5040/bin/nextval.elf"
+	platformEnv := strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM")))
+	if platformEnv == "" {
+		platformEnv = "tg5040"
+	}
+
+	execPath := "/mnt/SDCARD/.system/" + platformEnv + "/bin/nextval.elf"
 
 	cmd := exec.Command(execPath)
 	output, err := cmd.Output()

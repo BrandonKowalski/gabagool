@@ -9,6 +9,7 @@ package gabagool
 import (
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
@@ -54,9 +55,18 @@ func Init(options Options) {
 
 	if options.IsNextUI {
 		theme := nextui.InitNextUITheme()
+
+		// Detect power button input device path based on platform.
+		// TG5050 uses /dev/input/event2, all others use /dev/input/event1.
+		powerDevicePath := "/dev/input/event1"
+		platformEnv := strings.ToUpper(os.Getenv("PLATFORM"))
+		if strings.Contains(platformEnv, "TG5050") {
+			powerDevicePath = "/dev/input/event2"
+		}
+
 		pbc = internal.PowerButtonConfig{
 			ButtonCode:      116,
-			DevicePath:      "/dev/input/event1",
+			DevicePath:      powerDevicePath,
 			ShortPressMax:   2 * time.Second,
 			CoolDownTime:    1 * time.Second,
 			SuspendScript:   "/mnt/SDCARD/.system/tg5040/bin/suspend",
