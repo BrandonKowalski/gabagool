@@ -119,6 +119,7 @@ type detailScreenState struct {
 	directionalInput      internal.DirectionalInput
 	result                DetailScreenResult
 	activeSlideshow       int
+	sectionOffsets        []int32 // absolute Y offset of each section (scroll-independent)
 }
 
 type slideshowState struct {
@@ -484,7 +485,12 @@ func (s *detailScreenState) handleInputEvent(inputEvent *internal.Event) {
 	case constants.VirtualButtonDown:
 		s.startScrolling(false)
 	case constants.VirtualButtonLeft, constants.VirtualButtonRight:
-		s.handleSlideshowNavigation(inputEvent.Button == constants.VirtualButtonLeft)
+		isLeft := inputEvent.Button == constants.VirtualButtonLeft
+		if s.activeSlideshow >= 0 {
+			s.handleSlideshowNavigation(isLeft)
+		} else {
+			s.jumpToSection(isLeft)
+		}
 	case constants.VirtualButtonB:
 		s.result.Action = DetailActionCancelled
 	case constants.VirtualButtonA:
@@ -616,6 +622,37 @@ func (s *detailScreenState) handleSlideshowNavigation(isLeft bool) {
 	}
 }
 
+func (s *detailScreenState) jumpToSection(backward bool) {
+	if len(s.sectionOffsets) == 0 {
+		return
+	}
+
+	currentScroll := s.targetScrollY
+	threshold := int32(5) // small threshold to avoid getting stuck on current section
+
+	if backward {
+		// Find the previous section whose offset is before the current scroll position
+		for i := len(s.sectionOffsets) - 1; i >= 0; i-- {
+			if s.sectionOffsets[i] < currentScroll-threshold {
+				s.targetScrollY = internal.Max32(0, s.sectionOffsets[i])
+				return
+			}
+		}
+		// Already at or before the first section, jump to top
+		s.targetScrollY = 0
+	} else {
+		// Find the next section whose offset is after the current scroll position
+		for i := 0; i < len(s.sectionOffsets); i++ {
+			if s.sectionOffsets[i] > currentScroll+threshold {
+				s.targetScrollY = internal.Min32(s.maxScrollY, s.sectionOffsets[i])
+				return
+			}
+		}
+		// Already past the last section, jump to bottom
+		s.targetScrollY = s.maxScrollY
+	}
+}
+
 func (s *detailScreenState) findActiveSlideshow() int {
 	return s.activeSlideshow
 }
@@ -732,11 +769,15 @@ func (s *detailScreenState) renderSections(margins internal.Padding, startY int3
 
 	s.activeSlideshow = -1
 	s.visibleDropdownID = ""
+	s.sectionOffsets = make([]int32, len(s.options.Sections))
 
 	for sectionIndex, section := range s.options.Sections {
 		if sectionIndex > 0 {
 			currentY += 30
 		}
+
+		// Record the absolute Y position of this section (add back scrollY since currentY has it subtracted)
+		s.sectionOffsets[sectionIndex] = currentY + s.scrollY
 
 		currentY = s.renderSectionTitle(sectionIndex, margins, currentY, safeAreaHeight)
 		currentY = s.renderSectionDivider(margins, contentWidth, currentY, safeAreaHeight)
@@ -1108,16 +1149,13 @@ func (s *detailScreenState) renderTable(section Section, margins internal.Paddin
 	}
 
 	font := internal.Fonts.SmallFont
-	headerFont := internal.Fonts.MediumFont
+	headerFont := internal.Fonts.SmallFont
 
 	_, fontHeight, err := font.SizeUTF8("Aj")
 	if err != nil {
 		fontHeight = 20
 	}
-	_, headerFontHeight, err := headerFont.SizeUTF8("Aj")
-	if err != nil {
-		headerFontHeight = 24
-	}
+	headerFontHeight := fontHeight
 
 	cellPaddingX := int32(8)
 	cellPaddingY := int32(6)
@@ -1240,7 +1278,7 @@ func (s *detailScreenState) renderTable(section Section, margins internal.Paddin
 				if maxCellWidth < 10 {
 					maxCellWidth = 10
 				}
-				cellHeight := calculateMultilineTextHeight(row.Cells[col], font, maxCellWidth)
+				cellHeight := calculateMultilineTextHeight(row.Cells[col], font, maxCellWidth) - 20 // subtract trailing padding baked into calculateMultilineTextHeight
 				cellHeightWithPadding := cellHeight + cellPaddingY*2
 				if cellHeightWithPadding > rowHeight {
 					rowHeight = cellHeightWithPadding
