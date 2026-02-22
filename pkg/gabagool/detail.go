@@ -26,7 +26,21 @@ const (
 	SectionTypeDescription        // Wrapped text paragraph
 	SectionTypeImage              // Single static image
 	SectionTypeDropdown           // Interactive dropdown selector
+	SectionTypeTable              // Table with rows and optional headers
 )
+
+// Table grid style constants.
+const (
+	TableGridNone            = iota // No lines, just spacing
+	TableGridRowDividers            // Horizontal lines between rows
+	TableGridFull                   // Full grid (horizontal + vertical)
+	TableGridAlternatingRows        // Alternating row background colors
+)
+
+// TableRow represents a single row of cells in a table section.
+type TableRow struct {
+	Cells []string
+}
 
 // DropdownOption represents a selectable option in a dropdown section.
 type DropdownOption struct {
@@ -48,6 +62,9 @@ type Section struct {
 	DropdownID      string                      // Unique identifier for dropdown state
 	DefaultIndex    int                         // Initially selected dropdown index
 	OnChange        func(option DropdownOption) // Callback when dropdown selection changes
+	TableHeaders    []string                    // Optional column headers for table sections
+	TableRows       []TableRow                  // Row data for table sections
+	TableGrid       int                         // Grid style constant (default: TableGridNone)
 }
 
 // DetailScreenOptions configures the appearance and behavior of a DetailScreen.
@@ -180,6 +197,17 @@ func NewDropdownSection(title string, id string, options []DropdownOption, defau
 		DropdownID:      id,
 		DropdownOptions: options,
 		DefaultIndex:    defaultIndex,
+	}
+}
+
+// NewTableSection creates a table section with optional headers and configurable grid style.
+func NewTableSection(title string, headers []string, rows []TableRow, gridStyle int) Section {
+	return Section{
+		Type:         SectionTypeTable,
+		Title:        title,
+		TableHeaders: headers,
+		TableRows:    rows,
+		TableGrid:    gridStyle,
 	}
 }
 
@@ -687,7 +715,7 @@ func (s *detailScreenState) renderTitle(margins internal.Padding, statusBarWidth
 		s.renderer.Copy(s.titleTexture, srcRect, &titleRect)
 	}
 
-	return margins.Top + titleH + constants.DefaultTitleSpacing - s.scrollY
+	return margins.Top + titleH + constants.DefaultTitleSpacing + 15 - s.scrollY
 }
 
 func (s *detailScreenState) renderSections(margins internal.Padding, startY int32, safeAreaHeight int32) (int32, int32) {
@@ -763,6 +791,8 @@ func (s *detailScreenState) renderSectionContent(sectionIndex int, section Secti
 		return s.renderDescription(section, margins, contentWidth, currentY, safeAreaHeight)
 	case SectionTypeDropdown:
 		return s.renderDropdown(section, margins, contentWidth, currentY, safeAreaHeight)
+	case SectionTypeTable:
+		return s.renderTable(section, margins, contentWidth, currentY, safeAreaHeight)
 	}
 	return currentY
 }
@@ -1070,6 +1100,202 @@ func (s *detailScreenState) renderDropdownArrow(x, y int32, expanded bool) {
 		s.renderer.DrawLine(x, y-3, x+5, y+3)
 		s.renderer.DrawLine(x+5, y+3, x+10, y-3)
 	}
+}
+
+func (s *detailScreenState) renderTable(section Section, margins internal.Padding, contentWidth, currentY int32, safeAreaHeight int32) int32 {
+	if len(section.TableRows) == 0 {
+		return currentY
+	}
+
+	font := internal.Fonts.SmallFont
+	headerFont := internal.Fonts.MediumFont
+
+	_, fontHeight, err := font.SizeUTF8("Aj")
+	if err != nil {
+		fontHeight = 20
+	}
+	_, headerFontHeight, err := headerFont.SizeUTF8("Aj")
+	if err != nil {
+		headerFontHeight = 24
+	}
+
+	cellPaddingX := int32(8)
+	cellPaddingY := int32(6)
+
+	// Determine column count from headers or first row
+	numCols := len(section.TableHeaders)
+	for _, row := range section.TableRows {
+		if len(row.Cells) > numCols {
+			numCols = len(row.Cells)
+		}
+	}
+	if numCols == 0 {
+		return currentY
+	}
+
+	// Calculate column widths by measuring max text width per column
+	colWidths := make([]int32, numCols)
+	for col := 0; col < numCols; col++ {
+		// Measure header
+		if col < len(section.TableHeaders) && section.TableHeaders[col] != "" {
+			w, _, err := headerFont.SizeUTF8(section.TableHeaders[col])
+			if err == nil && int32(w) > colWidths[col] {
+				colWidths[col] = int32(w)
+			}
+		}
+		// Measure all rows
+		for _, row := range section.TableRows {
+			if col < len(row.Cells) && row.Cells[col] != "" {
+				w, _, err := font.SizeUTF8(row.Cells[col])
+				if err == nil && int32(w) > colWidths[col] {
+					colWidths[col] = int32(w)
+				}
+			}
+		}
+		colWidths[col] += cellPaddingX * 2
+	}
+
+	// Scale columns to fit contentWidth
+	totalNatural := int32(0)
+	for _, w := range colWidths {
+		totalNatural += w
+	}
+	if totalNatural > 0 {
+		if totalNatural > contentWidth {
+			// Scale down proportionally
+			for i := range colWidths {
+				colWidths[i] = int32(float64(colWidths[i]) * float64(contentWidth) / float64(totalNatural))
+				if colWidths[i] < cellPaddingX*2+10 {
+					colWidths[i] = cellPaddingX*2 + 10
+				}
+			}
+		} else if totalNatural < contentWidth {
+			// Distribute remaining space proportionally
+			remaining := contentWidth - totalNatural
+			for i := range colWidths {
+				extra := int32(float64(remaining) * float64(colWidths[i]) / float64(totalNatural))
+				colWidths[i] += extra
+			}
+		}
+	}
+
+	tableX := margins.Left
+	hasHeaders := len(section.TableHeaders) > 0
+
+	// Render header row
+	if hasHeaders {
+		headerHeight := int32(headerFontHeight) + cellPaddingY*2
+		headerRect := sdl.Rect{X: tableX, Y: currentY, W: contentWidth, H: headerHeight}
+
+		if isRectVisible(headerRect, safeAreaHeight) {
+			// Draw header background
+			s.renderer.SetDrawColor(50, 50, 50, 255)
+			s.renderer.FillRect(&headerRect)
+
+			cellX := tableX
+			for col := 0; col < numCols; col++ {
+				if col < len(section.TableHeaders) && section.TableHeaders[col] != "" {
+					textX := cellX + cellPaddingX
+					textY := currentY + cellPaddingY
+					maxCellWidth := colWidths[col] - cellPaddingX*2
+
+					internal.RenderMultilineTextWithCache(
+						s.renderer,
+						section.TableHeaders[col],
+						headerFont,
+						maxCellWidth,
+						textX,
+						textY,
+						s.options.TitleColor,
+						constants.TextAlignLeft,
+						s.textureCache)
+				}
+
+				// Draw vertical lines for Full grid
+				if section.TableGrid == TableGridFull && col > 0 {
+					s.renderer.SetDrawColor(80, 80, 80, 255)
+					s.renderer.DrawLine(cellX, currentY, cellX, currentY+headerHeight)
+				}
+
+				cellX += colWidths[col]
+			}
+
+			// Draw bottom border for header
+			if section.TableGrid != TableGridNone {
+				s.renderer.SetDrawColor(80, 80, 80, 255)
+				s.renderer.DrawLine(tableX, currentY+headerHeight, tableX+contentWidth, currentY+headerHeight)
+			}
+		}
+
+		currentY += int32(headerFontHeight) + cellPaddingY*2
+	}
+
+	// Render data rows
+	for rowIdx, row := range section.TableRows {
+		// Calculate row height based on tallest cell
+		rowHeight := int32(fontHeight) + cellPaddingY*2
+		for col := 0; col < numCols && col < len(row.Cells); col++ {
+			if row.Cells[col] != "" {
+				maxCellWidth := colWidths[col] - cellPaddingX*2
+				if maxCellWidth < 10 {
+					maxCellWidth = 10
+				}
+				cellHeight := calculateMultilineTextHeight(row.Cells[col], font, maxCellWidth)
+				cellHeightWithPadding := cellHeight + cellPaddingY*2
+				if cellHeightWithPadding > rowHeight {
+					rowHeight = cellHeightWithPadding
+				}
+			}
+		}
+
+		rowRect := sdl.Rect{X: tableX, Y: currentY, W: contentWidth, H: rowHeight}
+
+		if isRectVisible(rowRect, safeAreaHeight) {
+			// Alternating row backgrounds
+			if section.TableGrid == TableGridAlternatingRows && rowIdx%2 == 1 {
+				s.renderer.SetDrawColor(35, 35, 35, 255)
+				s.renderer.FillRect(&rowRect)
+			}
+
+			cellX := tableX
+			for col := 0; col < numCols; col++ {
+				if col < len(row.Cells) && row.Cells[col] != "" {
+					textX := cellX + cellPaddingX
+					textY := currentY + cellPaddingY
+					maxCellWidth := colWidths[col] - cellPaddingX*2
+
+					internal.RenderMultilineTextWithCache(
+						s.renderer,
+						row.Cells[col],
+						font,
+						maxCellWidth,
+						textX,
+						textY,
+						s.options.DescriptionColor,
+						constants.TextAlignLeft,
+						s.textureCache)
+				}
+
+				// Draw vertical lines for Full grid
+				if section.TableGrid == TableGridFull && col > 0 {
+					s.renderer.SetDrawColor(80, 80, 80, 255)
+					s.renderer.DrawLine(cellX, currentY, cellX, currentY+rowHeight)
+				}
+
+				cellX += colWidths[col]
+			}
+
+			// Draw row divider
+			if section.TableGrid == TableGridRowDividers || section.TableGrid == TableGridFull {
+				s.renderer.SetDrawColor(80, 80, 80, 255)
+				s.renderer.DrawLine(tableX, currentY+rowHeight, tableX+contentWidth, currentY+rowHeight)
+			}
+		}
+
+		currentY += rowHeight
+	}
+
+	return currentY + 15
 }
 
 func (s *detailScreenState) updateScrollLimits(totalContentHeight int32, safeAreaHeight int32, margins internal.Padding) {
