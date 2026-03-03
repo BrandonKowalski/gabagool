@@ -57,20 +57,33 @@ func Init(options Options) {
 		theme := nextui.InitNextUITheme()
 
 		// Detect power button input device path based on platform.
-		// TG5050 uses /dev/input/event2, all others use /dev/input/event1.
-		powerDevicePath := "/dev/input/event1"
-		platformEnv := strings.ToUpper(os.Getenv("PLATFORM"))
-		if strings.Contains(platformEnv, "TG5050") {
+		// tg5040: /dev/input/event1 for power button, button code 116.
+		// tg5050: /dev/input/event2 for power button, button code 116.
+		// my355:  /dev/input/event2 for power button, button code 102.
+		powerDevicePath := "/dev/input/unknown"
+		powerButtonCode := -1 // BUTTON_NA
+
+		platformEnv := strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM")))
+		if strings.Contains(platformEnv, "tg5040") {
+			powerDevicePath = "/dev/input/event1"
+			powerButtonCode = 116 // BUTTON_POWER
+		}
+		else if strings.Contains(platformEnv, "tg5050") {
 			powerDevicePath = "/dev/input/event2"
+			powerButtonCode = 116 // BUTTON_POWER
+		}
+		else if strings.Contains(platformEnv, "my355") {
+			powerDevicePath = "/dev/input/event2"
+			powerButtonCode = 102 // CODE_POWER for my355
 		}
 
 		pbc = internal.PowerButtonConfig{
-			ButtonCode:      116,
+			ButtonCode:      powerButtonCode,
 			DevicePath:      powerDevicePath,
 			ShortPressMax:   2 * time.Second,
 			CoolDownTime:    1 * time.Second,
-			SuspendScript:   "/mnt/SDCARD/.system/tg5040/bin/suspend",
-			ShutdownCommand: "/sbin/poweroff",
+			SuspendScript:   "/mnt/SDCARD/.system/" + platformEnv + "/bin/suspend",
+			ShutdownCommand: "/sbin/poweroff", // TODO: touch /tmp/poweroff and exit
 		}
 		internal.SetTheme(theme)
 	} else if options.IsCannoli {
