@@ -67,12 +67,10 @@ func Init(options Options) {
 		if strings.Contains(platformEnv, "tg5040") {
 			powerDevicePath = "/dev/input/event1"
 			powerButtonCode = 116 // BUTTON_POWER
-		}
-		else if strings.Contains(platformEnv, "tg5050") {
+		} else if strings.Contains(platformEnv, "tg5050") {
 			powerDevicePath = "/dev/input/event2"
 			powerButtonCode = 116 // BUTTON_POWER
-		}
-		else if strings.Contains(platformEnv, "my355") {
+		} else if strings.Contains(platformEnv, "my355") {
 			powerDevicePath = "/dev/input/event2"
 			powerButtonCode = 102 // CODE_POWER for my355
 		}
