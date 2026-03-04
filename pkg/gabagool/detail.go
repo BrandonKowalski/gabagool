@@ -445,10 +445,7 @@ func (s *detailScreenState) isFinished() bool {
 func (s *detailScreenState) handleEvents() {
 	processor := internal.GetInputProcessor()
 
-	// Wait for first event or timeout at ~60fps, then drain remaining events.
-	// WaitEventTimeout blocks up to 16ms when idle (reduces CPU usage vs PollEvent+Delay).
-	event := sdl.WaitEventTimeout(16)
-	for ; event != nil; event = sdl.PollEvent() {
+	if event := sdl.WaitEventTimeout(16); event != nil {
 		switch event.(type) {
 		case *sdl.QuitEvent:
 			s.result.Action = DetailActionCancelled
@@ -456,7 +453,7 @@ func (s *detailScreenState) handleEvents() {
 		case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
 			inputEvent := processor.ProcessSDLEvent(event.(sdl.Event))
 			if inputEvent == nil {
-				continue
+				return
 			}
 
 			if inputEvent.Pressed {
