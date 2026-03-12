@@ -20,8 +20,12 @@ func SetInputMappingBytes(data []byte) {
 
 // SetFlipFaceButtons enables or disables face button flipping.
 // When true, uses direct mapping (A=A, B=B, X=X, Y=Y) instead of the default swap.
+// Can be called at runtime; the change takes effect immediately if the input processor is initialized.
 func SetFlipFaceButtons(flip bool) {
 	flipFaceButtons = flip
+	if globalInputProcessor != nil {
+		globalInputProcessor.ReloadMapping()
+	}
 }
 
 // Source identifies the physical input source for an event.
@@ -193,6 +197,34 @@ func GetInputMapping() *InputMapping {
 		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_B] = constants.VirtualButtonB
 		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_X] = constants.VirtualButtonX
 		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_Y] = constants.VirtualButtonY
+
+		// Also swap in the joystick button map for devices that use raw joystick events
+		for key, val := range mapping.JoystickButtonMap {
+			switch val {
+			case constants.VirtualButtonA:
+				mapping.JoystickButtonMap[key] = constants.VirtualButtonB
+			case constants.VirtualButtonB:
+				mapping.JoystickButtonMap[key] = constants.VirtualButtonA
+			case constants.VirtualButtonX:
+				mapping.JoystickButtonMap[key] = constants.VirtualButtonY
+			case constants.VirtualButtonY:
+				mapping.JoystickButtonMap[key] = constants.VirtualButtonX
+			}
+		}
+
+		// Also swap in the keyboard map for dev/testing
+		for key, val := range mapping.KeyboardMap {
+			switch val {
+			case constants.VirtualButtonA:
+				mapping.KeyboardMap[key] = constants.VirtualButtonB
+			case constants.VirtualButtonB:
+				mapping.KeyboardMap[key] = constants.VirtualButtonA
+			case constants.VirtualButtonX:
+				mapping.KeyboardMap[key] = constants.VirtualButtonY
+			case constants.VirtualButtonY:
+				mapping.KeyboardMap[key] = constants.VirtualButtonX
+			}
+		}
 	}
 
 	return mapping

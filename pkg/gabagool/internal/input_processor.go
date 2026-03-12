@@ -63,6 +63,12 @@ func GetInputProcessor() *Processor {
 	return globalInputProcessor
 }
 
+// ReloadMapping reloads the input mapping from the current configuration.
+// This allows settings like face button swapping to take effect at runtime.
+func (ip *Processor) ReloadMapping() {
+	ip.mapping = GetInputMapping()
+}
+
 // Processor handles input mapping from physical devices to virtual buttons.
 // It processes SDL events and converts them to a unified input format,
 // supporting keyboard, game controllers, joysticks, and hat switches.

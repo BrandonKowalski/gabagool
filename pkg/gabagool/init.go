@@ -154,7 +154,7 @@ func SetInputMappingBytes(data []byte) {
 // SetFlipFaceButtons enables or disables direct face button mapping.
 // When true, uses A=A, B=B, X=X, Y=Y instead of the default Nintendo-style swap.
 // Can also be set via the FLIP_FACE_BUTTONS environment variable.
-// Call before Init() to take effect.
+// Can be called before or after Init(); changes take effect immediately.
 func SetFlipFaceButtons(flip bool) {
 	internal.SetFlipFaceButtons(flip)
 }
