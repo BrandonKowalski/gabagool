@@ -331,9 +331,15 @@ func loadRasterTexture(renderer *sdl.Renderer, imageData []byte, useTempFile boo
 		}
 		tmpFile.Close()
 
-		texture, err := img.LoadTexture(renderer, tmpPath)
+		surface, err := img.Load(tmpPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load texture from temp file: %w", err)
+			return nil, fmt.Errorf("failed to load surface from temp file: %w", err)
+		}
+		defer surface.Free()
+
+		texture, err := renderer.CreateTextureFromSurface(surface)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create texture from surface: %w", err)
 		}
 		return texture, nil
 	}
