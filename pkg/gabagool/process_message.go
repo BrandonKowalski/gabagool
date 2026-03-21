@@ -23,7 +23,6 @@ type ProcessMessageOptions struct {
 	ImageBytes          []byte // Image data loaded from embedded resources (supports PNG, JPEG, and SVG)
 	ImageWidth          int32  // Desired width for rendering (required for SVG, optional for raster images)
 	ImageHeight         int32  // Desired height for rendering (required for SVG, optional for raster images)
-	ImageUseTempFile    bool   // Write ImageBytes to a temp file and load from disk instead of from memory (for device compatibility)
 	ShowThemeBackground bool
 	ShowProgressBar     bool
 	Progress            *atomic.Float64
@@ -66,7 +65,7 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 
 	// Load image from bytes (preferred) or from file path (legacy)
 	if len(options.ImageBytes) > 0 {
-		texture, err := loadImageTexture(processor.window.Renderer, options.ImageBytes, options.ImageWidth, options.ImageHeight, options.ImageUseTempFile)
+		texture, err := loadImageTexture(processor.window.Renderer, options.ImageBytes, options.ImageWidth, options.ImageHeight)
 		if err == nil {
 			processor.imageTexture = texture
 		}
@@ -76,7 +75,7 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 			// Read SVG file
 			svgData, err := os.ReadFile(options.Image)
 			if err == nil {
-				texture, err := loadImageTexture(processor.window.Renderer, svgData, options.ImageWidth, options.ImageHeight, options.ImageUseTempFile)
+				texture, err := loadImageTexture(processor.window.Renderer, svgData, options.ImageWidth, options.ImageHeight)
 				if err == nil {
 					processor.imageTexture = texture
 				}
@@ -302,65 +301,56 @@ func isSVG(data []byte) bool {
 }
 
 // loadImageTexture loads an image (PNG, JPEG, or SVG) from bytes and creates an SDL texture
-func loadImageTexture(renderer *sdl.Renderer, imageData []byte, width, height int32, useTempFile bool) (*sdl.Texture, error) {
+func loadImageTexture(renderer *sdl.Renderer, imageData []byte, width, height int32) (*sdl.Texture, error) {
 	if isSVG(imageData) {
-		return loadSVGTexture(renderer, imageData, width, height, useTempFile)
+		return loadSVGTexture(renderer, imageData, width, height)
 	}
-	return loadRasterTexture(renderer, imageData, useTempFile)
+	return loadRasterTexture(renderer, imageData)
 }
 
 // loadRasterTexture loads a raster image (PNG, JPEG, etc.) from bytes.
-// When useTempFile is true, the bytes are written to a temporary file and loaded
-// via img.LoadTexture, which is more compatible with certain embedded devices that
-// do not support loading textures from memory. When false, the image is loaded
-// directly from memory via RWops.
-func loadRasterTexture(renderer *sdl.Renderer, imageData []byte, useTempFile bool) (*sdl.Texture, error) {
+// It first tries loading directly from memory via RWops. If that fails,
+// it falls back to writing the bytes to a temporary file and loading
+// from disk, which is more compatible with certain embedded devices.
+func loadRasterTexture(renderer *sdl.Renderer, imageData []byte) (*sdl.Texture, error) {
 	img.Init(img.INIT_PNG | img.INIT_JPG)
 
-	if useTempFile {
-		ext := ".png"
-		if len(imageData) >= 2 && imageData[0] == 0xFF && imageData[1] == 0xD8 {
-			ext = ".jpg"
-		}
-		tmpFile, err := os.CreateTemp("", "gabagool-img-*"+ext)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create temp file: %w", err)
-		}
-		tmpPath := tmpFile.Name()
-		defer os.Remove(tmpPath)
-
-		if _, err := tmpFile.Write(imageData); err != nil {
-			tmpFile.Close()
-			return nil, fmt.Errorf("failed to write image to temp file: %w", err)
-		}
-		tmpFile.Close()
-
-		surface, err := img.Load(tmpPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load surface from temp file: %w", err)
-		}
-		defer surface.Free()
-
-		texture, err := renderer.CreateTextureFromSurface(surface)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create texture from surface: %w", err)
-		}
-		return texture, nil
-	}
-
+	// Try loading directly from memory first
 	rw, err := sdl.RWFromMem(imageData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create RWops from image data: %w", err)
+	if err == nil {
+		texture, err := img.LoadTextureRW(renderer, rw, true)
+		if err == nil {
+			return texture, nil
+		}
 	}
-	texture, err := img.LoadTextureRW(renderer, rw, true)
+
+	// Fallback: write to a temp file and load from disk
+	ext := ".png"
+	if len(imageData) >= 2 && imageData[0] == 0xFF && imageData[1] == 0xD8 {
+		ext = ".jpg"
+	}
+	tmpFile, err := os.CreateTemp("", "gabagool-img-*"+ext)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load texture from image data: %w", err)
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := tmpFile.Write(imageData); err != nil {
+		tmpFile.Close()
+		return nil, fmt.Errorf("failed to write image to temp file: %w", err)
+	}
+	tmpFile.Close()
+
+	texture, err := img.LoadTexture(renderer, tmpPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load texture from temp file: %w", err)
 	}
 	return texture, nil
 }
 
 // loadSVGTexture rasterizes an SVG and creates an SDL texture
-func loadSVGTexture(renderer *sdl.Renderer, svgData []byte, width, height int32, useTempFile bool) (*sdl.Texture, error) {
+func loadSVGTexture(renderer *sdl.Renderer, svgData []byte, width, height int32) (*sdl.Texture, error) {
 	// Parse SVG
 	icon, err := oksvg.ReadIconStream(bytes.NewReader(svgData))
 	if err != nil {
@@ -397,7 +387,7 @@ func loadSVGTexture(renderer *sdl.Renderer, svgData []byte, width, height int32,
 	}
 
 	// Load the PNG as a texture
-	return loadRasterTexture(renderer, buf.Bytes(), useTempFile)
+	return loadRasterTexture(renderer, buf.Bytes())
 }
 
 // min returns the minimum of two integers
