@@ -318,7 +318,11 @@ func loadRasterTexture(renderer *sdl.Renderer, imageData []byte, useTempFile boo
 	img.Init(img.INIT_PNG | img.INIT_JPG)
 
 	if useTempFile {
-		tmpFile, err := os.CreateTemp("", "gabagool-img-*")
+		ext := ".png"
+		if len(imageData) >= 2 && imageData[0] == 0xFF && imageData[1] == 0xD8 {
+			ext = ".jpg"
+		}
+		tmpFile, err := os.CreateTemp("", "gabagool-img-*"+ext)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create temp file: %w", err)
 		}
