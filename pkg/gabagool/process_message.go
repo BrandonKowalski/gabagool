@@ -309,22 +309,13 @@ func loadImageTexture(renderer *sdl.Renderer, imageData []byte, width, height in
 }
 
 // loadRasterTexture loads a raster image (PNG, JPEG, etc.) from bytes.
-// It first tries loading directly from memory via RWops. If that fails,
-// it falls back to writing the bytes to a temporary file and loading
-// from disk, which is more compatible with certain embedded devices.
+// It writes the bytes to a temporary file and loads from disk via
+// img.LoadTexture, which is the most compatible approach across devices.
+// In-memory loading via RWops can produce corrupt textures on some
+// embedded devices even without returning an error.
 func loadRasterTexture(renderer *sdl.Renderer, imageData []byte) (*sdl.Texture, error) {
 	img.Init(img.INIT_PNG | img.INIT_JPG)
 
-	// Try loading directly from memory first
-	rw, err := sdl.RWFromMem(imageData)
-	if err == nil {
-		texture, err := img.LoadTextureRW(renderer, rw, true)
-		if err == nil {
-			return texture, nil
-		}
-	}
-
-	// Fallback: write to a temp file and load from disk
 	ext := ".png"
 	if len(imageData) >= 2 && imageData[0] == 0xFF && imageData[1] == 0xD8 {
 		ext = ".jpg"
