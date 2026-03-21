@@ -308,16 +308,25 @@ func loadImageTexture(renderer *sdl.Renderer, imageData []byte, width, height in
 	return loadRasterTexture(renderer, imageData)
 }
 
-// loadRasterTexture loads a raster image (PNG, JPEG, etc.) from bytes
+// loadRasterTexture loads a raster image (PNG, JPEG, etc.) from bytes.
+// It loads into a CPU-side surface first, then creates a GPU texture,
+// which is more compatible with embedded devices that may not support
+// direct texture creation from memory via img.LoadTextureRW.
 func loadRasterTexture(renderer *sdl.Renderer, imageData []byte) (*sdl.Texture, error) {
 	img.Init(img.INIT_PNG | img.INIT_JPG)
 	rw, err := sdl.RWFromMem(imageData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RWops from image data: %w", err)
 	}
-	texture, err := img.LoadTextureRW(renderer, rw, true)
+	surface, err := img.LoadRW(rw, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load texture from image data: %w", err)
+		return nil, fmt.Errorf("failed to load surface from image data: %w", err)
+	}
+	defer surface.Free()
+
+	texture, err := renderer.CreateTextureFromSurface(surface)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create texture from surface: %w", err)
 	}
 	return texture, nil
 }
