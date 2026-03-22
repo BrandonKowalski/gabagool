@@ -300,20 +300,22 @@ func isSVG(data []byte) bool {
 		bytes.Contains(data[:min(len(data), 512)], []byte("<?xml"))
 }
 
-// loadImageTexture loads an image (PNG, JPEG, or SVG) from bytes and creates an SDL texture
+// loadImageTexture loads an image (PNG, JPEG, or SVG) from bytes and creates an SDL texture.
+// The image is scaled down to the target width/height before creating the GPU texture
+// to avoid exhausting VRAM on devices with limited GPU memory.
 func loadImageTexture(renderer *sdl.Renderer, imageData []byte, width, height int32) (*sdl.Texture, error) {
 	if isSVG(imageData) {
 		return loadSVGTexture(renderer, imageData, width, height)
 	}
-	return loadRasterTexture(renderer, imageData)
+	return loadRasterTexture(renderer, imageData, width, height)
 }
 
 // loadRasterTexture loads a raster image (PNG, JPEG, etc.) from bytes.
-// It writes the bytes to a temporary file and loads from disk via
-// img.LoadTexture, which is the most compatible approach across devices.
-// In-memory loading via RWops can produce corrupt textures on some
-// embedded devices even without returning an error.
-func loadRasterTexture(renderer *sdl.Renderer, imageData []byte) (*sdl.Texture, error) {
+// It writes the bytes to a temporary file, loads as a CPU-side surface,
+// scales the surface down to the target dimensions, then creates the
+// GPU texture. This avoids exhausting GPU texture memory on devices
+// with limited VRAM (e.g. ARM7).
+func loadRasterTexture(renderer *sdl.Renderer, imageData []byte, maxWidth, maxHeight int32) (*sdl.Texture, error) {
 	img.Init(img.INIT_PNG | img.INIT_JPG)
 
 	ext := ".png"
@@ -333,9 +335,44 @@ func loadRasterTexture(renderer *sdl.Renderer, imageData []byte) (*sdl.Texture, 
 	}
 	tmpFile.Close()
 
-	texture, err := img.LoadTexture(renderer, tmpPath)
+	surface, err := img.Load(tmpPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load texture from temp file: %w", err)
+		return nil, fmt.Errorf("failed to load surface from temp file: %w", err)
+	}
+	defer surface.Free()
+
+	// Scale the surface down before creating the GPU texture to avoid
+	// exhausting GPU texture memory on devices with limited VRAM (e.g. ARM7).
+	textureSurface := surface
+	if maxWidth > 0 && maxHeight > 0 {
+		imageW, imageH := surface.W, surface.H
+		if imageW > maxWidth {
+			ratio := float32(maxWidth) / float32(imageW)
+			imageW = maxWidth
+			imageH = int32(float32(imageH) * ratio)
+		}
+		if imageH > maxHeight {
+			ratio := float32(maxHeight) / float32(imageH)
+			imageH = maxHeight
+			imageW = int32(float32(imageW) * ratio)
+		}
+		if imageW < surface.W || imageH < surface.H {
+			scaled, err := sdl.CreateRGBSurfaceWithFormat(0, imageW, imageH, 32, surface.Format.Format)
+			if err == nil {
+				dstRect := sdl.Rect{X: 0, Y: 0, W: imageW, H: imageH}
+				if err := surface.BlitScaled(nil, scaled, &dstRect); err == nil {
+					textureSurface = scaled
+					defer scaled.Free()
+				} else {
+					scaled.Free()
+				}
+			}
+		}
+	}
+
+	texture, err := renderer.CreateTextureFromSurface(textureSurface)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create texture from surface: %w", err)
 	}
 	return texture, nil
 }
@@ -378,7 +415,7 @@ func loadSVGTexture(renderer *sdl.Renderer, svgData []byte, width, height int32)
 	}
 
 	// Load the PNG as a texture
-	return loadRasterTexture(renderer, buf.Bytes())
+	return loadRasterTexture(renderer, buf.Bytes(), width, height)
 }
 
 // min returns the minimum of two integers
