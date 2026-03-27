@@ -30,7 +30,7 @@ type helpOverlay struct {
 // newHelpOverlay creates a help overlay with the given title, content lines, and exit instruction text.
 func newHelpOverlay(title string, lines []string, exitText string) *helpOverlay {
 	window := internal.GetWindow()
-	width, height := window.Window.GetSize()
+	width, height := window.GetWidth(), window.GetHeight()
 
 	if title == "" {
 		title = "Help"
