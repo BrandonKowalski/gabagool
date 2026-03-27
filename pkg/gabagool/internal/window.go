@@ -12,20 +12,24 @@ import (
 
 // Window wraps SDL window and renderer with additional state for the UI framework.
 type Window struct {
-	Window            *sdl.Window
-	Renderer          *sdl.Renderer
-	Title             string
-	FontSize          int
-	SmallFontSize     int
-	Background        *sdl.Texture
-	DisplayBackground bool
-	PowerButtonWG     sync.WaitGroup
-	PowerButtonConfig PowerButtonConfig
-	hasVSync          bool
-	lastPresentTime   uint64
+	Window             *sdl.Window
+	Renderer           *sdl.Renderer
+	Title              string
+	FontSize           int
+	SmallFontSize      int
+	Background         *sdl.Texture
+	DisplayBackground  bool
+	PowerButtonWG      sync.WaitGroup
+	PowerButtonConfig  PowerButtonConfig
+	hasVSync           bool
+	lastPresentTime    uint64
+	orientation        DisplayOrientation
+	canvas             *sdl.Texture // intermediate render target for rotation (nil when OrientationNormal)
+	physW, physH       int32        // physical screen dimensions
+	logicalW, logicalH int32        // logical canvas dimensions (swapped for 90/270°)
 }
 
-func initWindow(title string, displayBackground bool, winOpts WindowOptions) *Window {
+func initWindow(title string, displayBackground bool, winOpts WindowOptions, orientation DisplayOrientation) *Window {
 	displayIndex := 0
 	displayMode, err := sdl.GetCurrentDisplayMode(displayIndex)
 
@@ -33,10 +37,10 @@ func initWindow(title string, displayBackground bool, winOpts WindowOptions) *Wi
 		GetInternalLogger().Error("Failed to Get display mode!", "error", err)
 	}
 
-	return initWindowWithSize(title, displayMode.W, displayMode.H, displayBackground, winOpts)
+	return initWindowWithSize(title, displayMode.W, displayMode.H, displayBackground, winOpts, orientation)
 }
 
-func initWindowWithSize(title string, width, height int32, displayBackground bool, winOpts WindowOptions) *Window {
+func initWindowWithSize(title string, width, height int32, displayBackground bool, winOpts WindowOptions, orientation DisplayOrientation) *Window {
 	x, y := int32(0), int32(0)
 
 	if constants.IsDevMode() {
@@ -85,7 +89,12 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 		os.Exit(1)
 	}
 
-	renderer.SetLogicalSize(width, height)
+	logicalW, logicalH := width, height
+	if orientation == OrientationRotate90 || orientation == OrientationRotate270 {
+		logicalW, logicalH = height, width
+	}
+
+	renderer.SetLogicalSize(logicalW, logicalH)
 
 	info, err := renderer.GetInfo()
 	vsync := err == nil && info.Flags&sdl.RENDERER_PRESENTVSYNC != 0
@@ -96,6 +105,11 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 		Title:             title,
 		DisplayBackground: displayBackground,
 		hasVSync:          vsync,
+		orientation:       orientation,
+		physW:             width,
+		physH:             height,
+		logicalW:          logicalW,
+		logicalH:          logicalH,
 	}
 
 	// Render a few blank frames to synchronize the display pipeline.
@@ -106,6 +120,18 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 		renderer.SetDrawColor(0, 0, 0, 255)
 		renderer.Clear()
 		renderer.Present()
+	}
+
+	// Create an intermediate canvas texture when rotation is needed.
+	// All UI rendering goes to this canvas; Present() rotates it onto the screen.
+	if orientation != OrientationNormal {
+		canvas, err := renderer.CreateTexture(sdl.PIXELFORMAT_RGBA8888, sdl.TEXTUREACCESS_TARGET, logicalW, logicalH)
+		if err != nil {
+			GetInternalLogger().Error("Failed to create rotation canvas texture", "error", err)
+		} else {
+			win.canvas = canvas
+			renderer.SetRenderTarget(canvas)
+		}
 	}
 
 	win.loadBackground()
@@ -137,6 +163,9 @@ func (window *Window) closeWindow() {
 		window.PowerButtonWG.Done()
 	}
 
+	if window.canvas != nil {
+		window.canvas.Destroy()
+	}
 	if window.Background != nil {
 		window.Background.Destroy()
 	}
@@ -151,13 +180,11 @@ func GetWindow() *Window {
 }
 
 func (window *Window) GetWidth() int32 {
-	w, _ := window.Window.GetSize()
-	return w
+	return window.logicalW
 }
 
 func (window *Window) GetHeight() int32 {
-	_, h := window.Window.GetSize()
-	return h
+	return window.logicalH
 }
 
 func (window *Window) RenderBackground() {
@@ -168,8 +195,32 @@ func (window *Window) RenderBackground() {
 
 // Present swaps the render buffer and enforces ~60fps frame timing
 // when VSync is not available. Use this instead of renderer.Present().
+// When a rotation orientation is set, this rotates the canvas texture onto the screen.
 func (w *Window) Present() {
-	w.Renderer.Present()
+	if w.canvas != nil {
+		// Switch to screen as render target, clear it, then blit the canvas with rotation.
+		w.Renderer.SetRenderTarget(nil)
+		w.Renderer.SetDrawColor(0, 0, 0, 255)
+		w.Renderer.Clear()
+
+		// The destination rect is centered on the physical screen.
+		// After rotation, the canvas fills the screen exactly.
+		dst := sdl.Rect{
+			X: (w.physW - w.logicalW) / 2,
+			Y: (w.physH - w.logicalH) / 2,
+			W: w.logicalW,
+			H: w.logicalH,
+		}
+		w.Renderer.CopyEx(w.canvas, nil, &dst, float64(w.orientation), nil, sdl.FLIP_NONE)
+
+		w.Renderer.Present()
+
+		// Restore the canvas as render target for the next frame.
+		w.Renderer.SetRenderTarget(w.canvas)
+	} else {
+		w.Renderer.Present()
+	}
+
 	if !w.hasVSync {
 		now := sdl.GetTicks64()
 		if elapsed := now - w.lastPresentTime; elapsed < 16 {
