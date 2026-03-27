@@ -94,7 +94,13 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 		logicalW, logicalH = height, width
 	}
 
-	renderer.SetLogicalSize(logicalW, logicalH)
+	// SetLogicalSize is only used for the normal (no-rotation) case.
+	// When a canvas is used for rotation, SetLogicalSize must NOT be active:
+	// SDL2 would apply the logical->screen transform to the CopyEx dst rect in
+	// Present(), placing the canvas at the wrong position/scale on screen.
+	if orientation == OrientationNormal {
+		renderer.SetLogicalSize(logicalW, logicalH)
+	}
 
 	info, err := renderer.GetInfo()
 	vsync := err == nil && info.Flags&sdl.RENDERER_PRESENTVSYNC != 0
