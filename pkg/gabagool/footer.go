@@ -68,7 +68,7 @@ func renderFooter(
 
 	scaleFactor := internal.GetScaleFactor()
 	window := internal.GetWindow()
-	windowWidth, windowHeight := window.Window.GetSize()
+	windowWidth, windowHeight := window.GetWidth(), window.GetHeight()
 	y := windowHeight - bottomPadding - int32(float32(50)*scaleFactor)
 	outerPillHeight := int32(float32(60) * scaleFactor)
 

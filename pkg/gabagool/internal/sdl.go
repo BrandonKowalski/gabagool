@@ -11,7 +11,7 @@ import (
 
 var window *Window
 
-func Init(title string, showBackground bool, winOpts WindowOptions, pbc PowerButtonConfig) {
+func Init(title string, showBackground bool, winOpts WindowOptions, orientation DisplayOrientation, pbc PowerButtonConfig) {
 	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_AUDIO |
 		img.INIT_PNG | img.INIT_JPG | img.INIT_TIF | img.INIT_WEBP |
 		sdl.INIT_GAMECONTROLLER | sdl.INIT_JOYSTICK); err != nil {
@@ -33,7 +33,7 @@ func Init(title string, showBackground bool, winOpts WindowOptions, pbc PowerBut
 		}
 	}
 
-	window = initWindow(title, showBackground, winOpts)
+	window = initWindow(title, showBackground, winOpts, orientation)
 
 	initFonts(DefaultFontSizes)
 

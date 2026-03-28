@@ -18,6 +18,16 @@ import (
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/platform/nextui"
 )
 
+// DisplayOrientation specifies the clockwise rotation applied to the display output.
+type DisplayOrientation = internal.DisplayOrientation
+
+const (
+	OrientationNormal    DisplayOrientation = internal.OrientationNormal    // No rotation
+	OrientationRotate90  DisplayOrientation = internal.OrientationRotate90  // 90° clockwise
+	OrientationRotate180 DisplayOrientation = internal.OrientationRotate180 // 180°
+	OrientationRotate270 DisplayOrientation = internal.OrientationRotate270 // 270° clockwise (90° counter-clockwise)
+)
+
 // Options configures the gabagool UI framework initialization.
 type Options struct {
 	WindowTitle          string                 // Window title displayed in windowed mode
@@ -30,6 +40,7 @@ type Options struct {
 	LogPath              string                 // Full path for log file including filename (creates parent directories)
 	LogFilename          string                 // Deprecated: Use LogPath instead. Log filename within "logs" directory.
 	FlipFaceButtons      bool                   // Use direct face button mapping (A=A, B=B) instead of Nintendo-style swap
+	DisplayOrientation   DisplayOrientation     // Clockwise rotation of the display (0, 90, 180, 270 degrees)
 }
 
 // Init initializes the SDL subsystems, theming, and input handling.
@@ -96,7 +107,7 @@ func Init(options Options) {
 		internal.SetTheme(theme)
 	}
 
-	internal.Init(options.WindowTitle, options.ShowBackground, options.WindowOptions, pbc)
+	internal.Init(options.WindowTitle, options.ShowBackground, options.WindowOptions, options.DisplayOrientation, pbc)
 
 	if os.Getenv(constants.InputCaptureEnvVar) != "" {
 		mapping := InputLogger()

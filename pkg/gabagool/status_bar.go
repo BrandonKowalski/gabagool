@@ -191,7 +191,7 @@ func renderStatusBar(
 
 	scaleFactor := internal.GetScaleFactor()
 	window := internal.GetWindow()
-	windowWidth, _ := window.Window.GetSize()
+	windowWidth := window.GetWidth()
 
 	outerPadding := int32(float32(20) * scaleFactor)
 	innerPaddingX := int32(float32(10) * scaleFactor)
