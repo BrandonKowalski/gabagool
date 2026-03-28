@@ -68,6 +68,11 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 		} else {
 			height = 768
 		}
+
+		// Swap window dimensions so the desktop window matches the rotated aspect ratio.
+		if orientation == OrientationRotate90 || orientation == OrientationRotate270 {
+			width, height = height, width
+		}
 	}
 
 	windowFlags := winOpts.ToSDLFlags()
@@ -87,6 +92,13 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 	if lastErr != nil {
 		GetInternalLogger().Error("Failed to create any renderer!", "final_error", lastErr)
 		os.Exit(1)
+	}
+
+	switch orientation {
+	case OrientationNormal, OrientationRotate90, OrientationRotate180, OrientationRotate270:
+	default:
+		GetInternalLogger().Warn("Unsupported display orientation, falling back to normal", "orientation", orientation)
+		orientation = OrientationNormal
 	}
 
 	logicalW, logicalH := width, height
