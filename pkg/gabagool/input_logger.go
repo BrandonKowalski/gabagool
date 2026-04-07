@@ -11,6 +11,44 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+// InputMapping is the public alias for the input mapping type returned by the logger wizard.
+type InputMapping = internal.InputMapping
+
+// InputLoggerButton defines a virtual button to configure and its display name shown to the user.
+type InputLoggerButton struct {
+	Button      constants.VirtualButton // The virtual button to map
+	DisplayName string                  // Label shown on screen (e.g. "A Button", "Jump")
+}
+
+// InputLoggerOptions configures the input mapping wizard component.
+type InputLoggerOptions struct {
+	// Title shown at the top of the wizard screen. Defaults to "Input Configuration".
+	Title string
+	// Buttons to configure. Defaults to all standard buttons when empty.
+	Buttons []InputLoggerButton
+}
+
+// defaultInputLoggerButtons returns the standard set of buttons to configure.
+func defaultInputLoggerButtons() []InputLoggerButton {
+	return []InputLoggerButton{
+		{constants.VirtualButtonA, "A Button"},
+		{constants.VirtualButtonB, "B Button"},
+		{constants.VirtualButtonX, "X Button"},
+		{constants.VirtualButtonY, "Y Button"},
+		{constants.VirtualButtonUp, "D-Pad Up"},
+		{constants.VirtualButtonDown, "D-Pad Down"},
+		{constants.VirtualButtonLeft, "D-Pad Left"},
+		{constants.VirtualButtonRight, "D-Pad Right"},
+		{constants.VirtualButtonStart, "Start"},
+		{constants.VirtualButtonSelect, "Select"},
+		{constants.VirtualButtonL1, "L1"},
+		{constants.VirtualButtonL2, "L2"},
+		{constants.VirtualButtonR1, "R1"},
+		{constants.VirtualButtonR2, "R2"},
+		{constants.VirtualButtonMenu, "Menu"},
+	}
+}
+
 // buttonConfig pairs a virtual button with its display name for the input logger wizard.
 type buttonConfig struct {
 	internalButton constants.VirtualButton
@@ -28,6 +66,7 @@ type mappedInput struct {
 type inputLoggerController struct {
 	lastInput         string
 	lastButtonName    string
+	title             string
 	font              *ttf.Font
 	textColor         sdl.Color
 	currentButtonIdx  int
@@ -39,46 +78,44 @@ type inputLoggerController struct {
 	waitingForRelease bool
 }
 
-func newInputLogger() *inputLoggerController {
+func newInputLogger(options InputLoggerOptions) *inputLoggerController {
+	title := options.Title
+	if title == "" {
+		title = "Gabagool Input Configuration"
+	}
+
+	buttons := options.Buttons
+	if len(buttons) == 0 {
+		buttons = defaultInputLoggerButtons()
+	}
+
+	sequence := make([]buttonConfig, len(buttons))
+	for i, b := range buttons {
+		sequence[i] = buttonConfig{internalButton: b.Button, displayName: b.DisplayName}
+	}
+
 	return &inputLoggerController{
 		lastInput:         "",
 		lastButtonName:    "",
+		title:             title,
 		font:              internal.Fonts.LargeFont,
 		textColor:         sdl.Color{R: 200, G: 100, B: 255, A: 255},
 		mappedButtons:     make(map[constants.VirtualButton]mappedInput),
 		currentButtonIdx:  0,
 		debounceDelay:     1000 * time.Millisecond,
 		waitingForRelease: false,
-		buttonSequence: []buttonConfig{
-			{constants.VirtualButtonA, "A Button"},
-			{constants.VirtualButtonB, "B Button"},
-			{constants.VirtualButtonX, "X Button"},
-			{constants.VirtualButtonY, "Y Button"},
-			{constants.VirtualButtonUp, "D-Pad Up"},
-			{constants.VirtualButtonDown, "D-Pad Down"},
-			{constants.VirtualButtonLeft, "D-Pad Left"},
-			{constants.VirtualButtonRight, "D-Pad Right"},
-			{constants.VirtualButtonStart, "Start"},
-			{constants.VirtualButtonSelect, "Select"},
-			{constants.VirtualButtonL1, "L1"},
-			{constants.VirtualButtonL2, "L2"},
-			{constants.VirtualButtonR1, "R1"},
-			{constants.VirtualButtonR2, "R2"},
-			{constants.VirtualButtonMenu, "Menu"},
-			//{InternalButtonF1, "F1"},
-			//{InternalButtonF2, "F2"},
-			//{InternalButtonVolumeUp, "Volume Up"},
-			//{InternalButtonVolumeDown, "Volume Down"},
-			//{InternalButtonPower, "Power"},
-		},
+		buttonSequence:    sequence,
 	}
 }
 
-// InputLogger runs an interactive wizard that prompts the user to press each button
+// ShowInputLogger runs an interactive wizard that prompts the user to press each button
 // on their controller, building a custom input mapping. Returns the completed mapping
 // or nil if cancelled (ESC key). The mapping can be saved to JSON for later use.
-func InputLogger() *internal.InputMapping {
-	logger := newInputLogger()
+//
+// Use InputLoggerOptions to customize the title and the subset of buttons to configure.
+// An empty Options value uses sensible defaults (all standard buttons).
+func ShowInputLogger(options InputLoggerOptions) *InputMapping {
+	logger := newInputLogger(options)
 
 	internal.GetInternalLogger().Info("Input logger started", "totalButtons", len(logger.buttonSequence))
 
@@ -99,6 +136,12 @@ func InputLogger() *internal.InputMapping {
 	}
 
 	return logger.buildMapping()
+}
+
+// InputLogger runs the input mapping wizard with default options.
+// Deprecated: use ShowInputLogger instead.
+func InputLogger() *InputMapping {
+	return ShowInputLogger(InputLoggerOptions{})
 }
 
 // handleEvent processes a single SDL event, mapping it to the current button if valid.
@@ -270,8 +313,7 @@ func (il *inputLoggerController) render() {
 	il.mutex.Lock()
 	defer il.mutex.Unlock()
 
-	title := "Gabagool Input Configuration"
-	il.renderText(renderer, title, internal.GetWindow().GetWidth()/2, 50, true)
+	il.renderText(renderer, il.title, internal.GetWindow().GetWidth()/2, 50, true)
 
 	if il.currentButtonIdx >= len(il.buttonSequence) {
 		completionText := "Configuration Complete!"
