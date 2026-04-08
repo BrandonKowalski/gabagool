@@ -110,12 +110,10 @@ func Init(options Options) {
 	internal.Init(options.WindowTitle, options.ShowBackground, options.WindowOptions, options.DisplayOrientation, pbc)
 
 	if os.Getenv(constants.InputCaptureEnvVar) != "" {
-		mapping := ShowInputLogger(InputLoggerOptions{})
-		if mapping != nil {
-			err := mapping.SaveToJSON("custom_input_mapping.json")
-			if err != nil {
-				internal.GetInternalLogger().Error("Failed to save custom input mapping", "error", err)
-			}
+		mapping := ShowInputCapture(InputCaptureOptions{})
+		err := mapping.SaveToJSON("custom_input_mapping.json")
+		if err != nil {
+			internal.GetInternalLogger().Error("Failed to save custom input mapping", "error", err)
 		}
 		os.Exit(0)
 	}
