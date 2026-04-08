@@ -652,11 +652,7 @@ func (olc *optionsListController) moveSelection(direction int) {
 			olc.SelectedIndex--
 			if olc.SelectedIndex < 0 {
 				olc.SelectedIndex = len(olc.Items) - 1
-				if len(olc.Items) > olc.MaxVisibleItems {
-					olc.VisibleStartIndex = len(olc.Items) - olc.MaxVisibleItems
-				} else {
-					olc.VisibleStartIndex = 0
-				}
+				olc.VisibleStartIndex = 0
 			}
 		}
 
@@ -845,8 +841,26 @@ func (olc *optionsListController) cycleOptionRight() {
 	}
 }
 
+func (olc *optionsListController) countVisibleItems() int {
+	count := 0
+	for i := range olc.Items {
+		if olc.Items[i].IsVisible() {
+			count++
+		}
+	}
+	return count
+}
+
 func (olc *optionsListController) scrollTo(index int) {
 	if index < 0 || index >= len(olc.Items) {
+		return
+	}
+
+	visibleCount := olc.countVisibleItems()
+
+	// If all visible items fit on screen, no scrolling needed
+	if visibleCount <= olc.MaxVisibleItems {
+		olc.VisibleStartIndex = 0
 		return
 	}
 
@@ -855,17 +869,49 @@ func (olc *optionsListController) scrollTo(index int) {
 		contextItems = 1
 	}
 
-	newStart := index - contextItems
-	if newStart < 0 {
-		newStart = 0
+	// Count visible items before the target index to determine scroll position
+	visibleBefore := 0
+	for i := 0; i < index; i++ {
+		if olc.Items[i].IsVisible() {
+			visibleBefore++
+		}
 	}
 
-	maxStart := len(olc.Items) - olc.MaxVisibleItems
-	if maxStart < 0 {
-		maxStart = 0
+	newStart := 0
+	visibleSeen := 0
+	targetVisiblePos := visibleBefore - contextItems
+	if targetVisiblePos < 0 {
+		targetVisiblePos = 0
 	}
-	if newStart > maxStart {
-		newStart = maxStart
+
+	// Find the raw index that corresponds to the target visible position
+	if targetVisiblePos > 0 {
+		for i := range olc.Items {
+			if olc.Items[i].IsVisible() {
+				if visibleSeen == targetVisiblePos {
+					newStart = i
+					break
+				}
+				visibleSeen++
+			}
+		}
+	}
+
+	// Calculate max start: find the raw index where the last MaxVisibleItems visible items begin
+	maxVisibleStart := 0
+	visibleFromEnd := 0
+	for i := len(olc.Items) - 1; i >= 0; i-- {
+		if olc.Items[i].IsVisible() {
+			visibleFromEnd++
+			if visibleFromEnd == olc.MaxVisibleItems {
+				maxVisibleStart = i
+				break
+			}
+		}
+	}
+
+	if newStart > maxVisibleStart {
+		newStart = maxVisibleStart
 	}
 
 	olc.VisibleStartIndex = newStart
