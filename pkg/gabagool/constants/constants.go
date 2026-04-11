@@ -43,6 +43,19 @@ const (
 	// By default, gabagool swaps face buttons for Nintendo-style layouts.
 	// Set this to "1" or "true" for direct mapping (A=A, B=B, X=X, Y=Y).
 	FlipFaceButtonsEnvVar = "FLIP_FACE_BUTTONS"
+
+	// DisableKeyboardInputEnvVar suppresses SDL keyboard events when set to "1" or "true".
+	// Useful on devices where the CFW remaps controller buttons to keyboard keys,
+	// causing duplicate events (e.g. Miyoo Flip V2 with MinUI).
+	DisableKeyboardInputEnvVar = "DISABLE_KEYBOARD_INPUT"
+
+	// DisableControllerInputEnvVar suppresses SDL game controller events (buttons and axes)
+	// when set to "1" or "true".
+	DisableControllerInputEnvVar = "DISABLE_CONTROLLER_INPUT"
+
+	// DisableJoystickInputEnvVar suppresses SDL raw joystick events (buttons, axes, hats)
+	// when set to "1" or "true".
+	DisableJoystickInputEnvVar = "DISABLE_JOYSTICK_INPUT"
 )
 
 // IsDevMode returns true if running in development mode (ENVIRONMENT=DEV).
