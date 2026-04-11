@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
@@ -69,12 +70,58 @@ func (ip *Processor) ReloadMapping() {
 	ip.mapping = GetInputMapping()
 }
 
+// SetDisabledInputSources replaces the processor's disabled-sources config.
+// Changes take effect immediately for all subsequent events.
+func (ip *Processor) SetDisabledInputSources(s DisabledInputSources) {
+	ip.disabledSources = s
+}
+
+// SetDisabledInputSources updates the disabled input sources on the global processor.
+func SetDisabledInputSources(s DisabledInputSources) {
+	if globalInputProcessor != nil {
+		globalInputProcessor.SetDisabledInputSources(s)
+	}
+}
+
+func isEnvDisabled(envVar string) bool {
+	v := os.Getenv(envVar)
+	return v == "1" || v == "true"
+}
+
+// isKeyboardDisabled returns true when keyboard events should be suppressed,
+// either via the programmatic setting or the DISABLE_KEYBOARD_INPUT env var.
+func (ip *Processor) isKeyboardDisabled() bool {
+	return ip.disabledSources.Keyboard || isEnvDisabled(constants.DisableKeyboardInputEnvVar)
+}
+
+// isControllerDisabled returns true when controller events should be suppressed,
+// either via the programmatic setting or the DISABLE_CONTROLLER_INPUT env var.
+func (ip *Processor) isControllerDisabled() bool {
+	return ip.disabledSources.Controller || isEnvDisabled(constants.DisableControllerInputEnvVar)
+}
+
+// isJoystickDisabled returns true when joystick events should be suppressed,
+// either via the programmatic setting or the DISABLE_JOYSTICK_INPUT env var.
+func (ip *Processor) isJoystickDisabled() bool {
+	return ip.disabledSources.Joystick || isEnvDisabled(constants.DisableJoystickInputEnvVar)
+}
+
+// DisabledInputSources controls which physical input event types are ignored by
+// the processor. The zero value enables all sources (safe default).
+// Use SetDisabledInputSources to change this at any time.
+type DisabledInputSources struct {
+	Keyboard   bool // ignore sdl.KeyboardEvent
+	Controller bool // ignore sdl.ControllerButtonEvent and sdl.ControllerAxisEvent
+	Joystick   bool // ignore sdl.JoyButtonEvent, sdl.JoyAxisEvent, and sdl.JoyHatEvent
+}
+
 // Processor handles input mapping from physical devices to virtual buttons.
 // It processes SDL events and converts them to a unified input format,
 // supporting keyboard, game controllers, joysticks, and hat switches.
 // Also handles combo detection (chords and sequences).
 type Processor struct {
 	mapping                       *InputMapping
+	disabledSources               DisabledInputSources
 	gameControllerJoystickIndices map[int]bool
 	axisStates                    map[uint8]int8  // tracks which direction each axis is pressed: -1 (negative), 0 (none), 1 (positive)
 	hatStates                     map[uint8]uint8 // tracks the current hat position
@@ -203,6 +250,9 @@ func (ip *Processor) ProcessSDLEvent(event sdl.Event) *Event {
 
 	switch e := event.(type) {
 	case *sdl.KeyboardEvent:
+		if ip.isKeyboardDisabled() {
+			return nil
+		}
 		keyCode := e.Keysym.Sym
 		keyName := sdl.GetKeyName(keyCode)
 		if button, exists := ip.mapping.KeyboardMap[keyCode]; exists {
@@ -218,6 +268,9 @@ func (ip *Processor) ProcessSDLEvent(event sdl.Event) *Event {
 			"key_code", fmt.Sprintf("%s (%d)", keyName, keyCode),
 			"mappingSize", len(ip.mapping.KeyboardMap))
 	case *sdl.ControllerButtonEvent:
+		if ip.isControllerDisabled() {
+			return nil
+		}
 		buttonName := sdl.GameControllerGetStringForButton(sdl.GameControllerButton(e.Button))
 		if button, exists := ip.mapping.ControllerButtonMap[sdl.GameControllerButton(e.Button)]; exists {
 			if e.Type == sdl.CONTROLLERBUTTONDOWN {
@@ -231,6 +284,9 @@ func (ip *Processor) ProcessSDLEvent(event sdl.Event) *Event {
 		logger.Debug("Controller button not mapped",
 			"button_code", fmt.Sprintf("%s (%d)", buttonName, e.Button))
 	case *sdl.JoyHatEvent:
+		if ip.isJoystickDisabled() {
+			return nil
+		}
 		previousValue := ip.hatStates[e.Hat]
 		ip.hatStates[e.Hat] = e.Value
 
@@ -288,6 +344,9 @@ func (ip *Processor) ProcessSDLEvent(event sdl.Event) *Event {
 			}
 		}
 	case *sdl.ControllerAxisEvent:
+		if ip.isControllerDisabled() {
+			return nil
+		}
 		axisName := sdl.GameControllerGetStringForAxis(sdl.GameControllerAxis(e.Axis))
 		if axisConfig, exists := ip.mapping.JoystickAxisMap[e.Axis]; exists {
 			previousState := ip.axisStates[e.Axis]
@@ -341,6 +400,9 @@ func (ip *Processor) ProcessSDLEvent(event sdl.Event) *Event {
 			"axis_code", fmt.Sprintf("%s (%d)", axisName, e.Axis),
 			"value", e.Value)
 	case *sdl.JoyButtonEvent:
+		if ip.isJoystickDisabled() {
+			return nil
+		}
 		joyButtonName := getJoyButtonName(e.Button)
 		if button, exists := ip.mapping.JoystickButtonMap[e.Button]; exists {
 			logger.Debug("Joy button mapped",
@@ -351,6 +413,9 @@ func (ip *Processor) ProcessSDLEvent(event sdl.Event) *Event {
 		logger.Debug("Joy button not mapped",
 			"button_code", fmt.Sprintf("%s (%d)", joyButtonName, e.Button))
 	case *sdl.JoyAxisEvent:
+		if ip.isJoystickDisabled() {
+			return nil
+		}
 		joyAxisName := getJoyAxisName(e.Axis)
 		if axisConfig, exists := ip.mapping.JoystickAxisMap[e.Axis]; exists {
 			previousState := ip.axisStates[e.Axis]

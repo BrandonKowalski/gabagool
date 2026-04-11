@@ -21,6 +21,17 @@ import (
 // DisplayOrientation specifies the clockwise rotation applied to the display output.
 type DisplayOrientation = internal.DisplayOrientation
 
+// DisabledInputSources controls which physical input event types are ignored by
+// the input processor. The zero value enables all sources (safe default).
+//
+// Example — disable keyboard events (useful on devices where CFW remaps
+// controller buttons to keyboard keys, causing duplicate events):
+//
+//	gabagool.Init(gabagool.Options{
+//	    DisabledInputSources: gabagool.DisabledInputSources{Keyboard: true},
+//	})
+type DisabledInputSources = internal.DisabledInputSources
+
 const (
 	OrientationNormal    DisplayOrientation = internal.OrientationNormal    // No rotation
 	OrientationRotate90  DisplayOrientation = internal.OrientationRotate90  // 90° clockwise
@@ -41,6 +52,7 @@ type Options struct {
 	LogFilename          string                 // Deprecated: Use LogPath instead. Log filename within "logs" directory.
 	FlipFaceButtons      bool                   // Use direct face button mapping (A=A, B=B) instead of Nintendo-style swap
 	DisplayOrientation   DisplayOrientation     // Clockwise rotation of the display (0, 90, 180, 270 degrees)
+	DisabledInputSources DisabledInputSources   // Input event types to ignore (keyboard, controller, joystick)
 }
 
 // Init initializes the SDL subsystems, theming, and input handling.
@@ -109,6 +121,10 @@ func Init(options Options) {
 
 	internal.Init(options.WindowTitle, options.ShowBackground, options.WindowOptions, options.DisplayOrientation, pbc)
 
+	if (options.DisabledInputSources != DisabledInputSources{}) {
+		internal.SetDisabledInputSources(options.DisabledInputSources)
+	}
+
 	if os.Getenv(constants.InputCaptureEnvVar) != "" {
 		mapping := ShowInputCapture(InputCaptureOptions{})
 		err := mapping.SaveToJSON("custom_input_mapping.json")
@@ -166,6 +182,16 @@ func SetInputMappingBytes(data []byte) {
 // Can be called before or after Init(); changes take effect immediately.
 func SetFlipFaceButtons(flip bool) {
 	internal.SetFlipFaceButtons(flip)
+}
+
+// SetDisabledInputSources updates which physical input event types are ignored.
+// Can be called at any time after Init() to adjust input handling at runtime.
+// For example, to suppress keyboard events on a device where the CFW remaps
+// controller buttons to keyboard keys (causing duplicate events):
+//
+//	gabagool.SetDisabledInputSources(gabagool.DisabledInputSources{Keyboard: true})
+func SetDisabledInputSources(s DisabledInputSources) {
+	internal.SetDisabledInputSources(s)
 }
 
 // GetWindow returns the underlying SDL window wrapper for advanced use cases.
