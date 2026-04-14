@@ -193,10 +193,18 @@ func GetInputMapping() *InputMapping {
 	// Check if face buttons should be flipped to direct mapping
 	if shouldFlipFaceButtons() {
 		logger.Info("Flipping face buttons to direct mapping (A=A, B=B, X=X, Y=Y)")
-		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_A] = constants.VirtualButtonA
-		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_B] = constants.VirtualButtonB
-		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_X] = constants.VirtualButtonX
-		mapping.ControllerButtonMap[sdl.CONTROLLER_BUTTON_Y] = constants.VirtualButtonY
+		for key, val := range mapping.ControllerButtonMap {
+			switch val {
+			case constants.VirtualButtonA:
+				mapping.ControllerButtonMap[key] = constants.VirtualButtonB
+			case constants.VirtualButtonB:
+				mapping.ControllerButtonMap[key] = constants.VirtualButtonA
+			case constants.VirtualButtonX:
+				mapping.ControllerButtonMap[key] = constants.VirtualButtonY
+			case constants.VirtualButtonY:
+				mapping.ControllerButtonMap[key] = constants.VirtualButtonX
+			}
+		}
 
 		// Also swap in the joystick button map for devices that use raw joystick events
 		for key, val := range mapping.JoystickButtonMap {
