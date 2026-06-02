@@ -64,6 +64,25 @@ func GetInputProcessor() *Processor {
 	return globalInputProcessor
 }
 
+// InstallInputEventFilter drops unmapped axis-motion events so high-frequency devices (e.g. Steam Deck sticks/IMU) can't flood the SDL queue and starve input. Call after InitInputProcessor.
+func InstallInputEventFilter() {
+	sdl.SetEventFilterFunc(func(e sdl.Event, _ interface{}) bool {
+		ip := globalInputProcessor
+		if ip == nil || ip.mapping == nil {
+			return true
+		}
+		switch ev := e.(type) {
+		case *sdl.ControllerAxisEvent:
+			_, mapped := ip.mapping.JoystickAxisMap[ev.Axis]
+			return mapped
+		case *sdl.JoyAxisEvent:
+			_, mapped := ip.mapping.JoystickAxisMap[ev.Axis]
+			return mapped
+		}
+		return true
+	}, nil)
+}
+
 // ReloadMapping reloads the input mapping from the current configuration.
 // This allows settings like face button swapping to take effect at runtime.
 func (ip *Processor) ReloadMapping() {

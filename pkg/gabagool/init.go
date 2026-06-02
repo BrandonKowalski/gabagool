@@ -133,6 +133,9 @@ func Init(options Options) {
 		}
 		os.Exit(0)
 	}
+
+	// Installed after the input-capture branch above, which needs raw axis events.
+	internal.InstallInputEventFilter()
 }
 
 // Close releases all SDL resources and shuts down the UI framework.
