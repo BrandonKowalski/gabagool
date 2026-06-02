@@ -172,23 +172,15 @@ func List(options ListOptions) (*ListResult, error) {
 	}
 
 	for running {
-		// Use WaitEventTimeout to reduce CPU usage when idle
-		// 16ms timeout gives ~60fps max while allowing CPU to sleep
+		// Drain all queued events each frame so input bursts don't back up one-per-frame.
 		if event := sdl.WaitEventTimeout(16); event != nil {
-			switch event.(type) {
-			case *sdl.QuitEvent:
-				running = false
-			case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
-				lc.handleInput(event, &running, &result, &cancelled)
-			case *sdl.WindowEvent:
-				we := event.(*sdl.WindowEvent)
-				if we.Event == sdl.WINDOWEVENT_RESIZED {
-					newMaxItems := lc.calculateMaxVisibleItems(window)
-					lc.Options.MaxVisibleItems = int(newMaxItems)
-					if lc.Options.SelectedIndex >= lc.Options.VisibleStartIndex+lc.Options.MaxVisibleItems {
-						lc.scrollTo(lc.Options.SelectedIndex)
-					}
+			lc.dispatchEvent(window, event, &running, &result, &cancelled)
+			for running {
+				next := sdl.PollEvent()
+				if next == nil {
+					break
 				}
+				lc.dispatchEvent(window, next, &running, &result, &cancelled)
 			}
 		}
 
@@ -210,6 +202,24 @@ func List(options ListOptions) (*ListResult, error) {
 	}
 
 	return &result, nil
+}
+
+func (lc *listController) dispatchEvent(window *internal.Window, event sdl.Event, running *bool, result *ListResult, cancelled *bool) {
+	switch event.(type) {
+	case *sdl.QuitEvent:
+		*running = false
+	case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
+		lc.handleInput(event, running, result, cancelled)
+	case *sdl.WindowEvent:
+		we := event.(*sdl.WindowEvent)
+		if we.Event == sdl.WINDOWEVENT_RESIZED {
+			newMaxItems := lc.calculateMaxVisibleItems(window)
+			lc.Options.MaxVisibleItems = int(newMaxItems)
+			if lc.Options.SelectedIndex >= lc.Options.VisibleStartIndex+lc.Options.MaxVisibleItems {
+				lc.scrollTo(lc.Options.SelectedIndex)
+			}
+		}
+	}
 }
 
 func (lc *listController) handleInput(event interface{}, running *bool, result *ListResult, cancelled *bool) {
@@ -1051,15 +1061,14 @@ func (lc *listController) updateScrollData(data *internal.TextScrollData, curren
 func (lc *listController) getOrCreateScrollData(index int, text string, font *ttf.Font, maxWidth int32) *internal.TextScrollData {
 	data, exists := lc.itemScrollData[index]
 	if !exists {
-		surface, _ := font.RenderUTF8Blended(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
-		if surface == nil {
+		w, _, err := font.SizeUTF8(text)
+		if err != nil {
 			return &internal.TextScrollData{}
 		}
-		defer surface.Free()
 
 		data = &internal.TextScrollData{
-			NeedsScrolling: surface.W > maxWidth,
-			TextWidth:      surface.W,
+			NeedsScrolling: int32(w) > maxWidth,
+			TextWidth:      int32(w),
 			ContainerWidth: maxWidth,
 			Direction:      1,
 		}
@@ -1069,12 +1078,11 @@ func (lc *listController) getOrCreateScrollData(index int, text string, font *tt
 }
 
 func (lc *listController) shouldScroll(font *ttf.Font, text string, maxWidth int32) bool {
-	surface, _ := font.RenderUTF8Blended(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
-	if surface == nil {
+	w, _, err := font.SizeUTF8(text)
+	if err != nil {
 		return false
 	}
-	defer surface.Free()
-	return surface.W > maxWidth
+	return int32(w) > maxWidth
 }
 
 func (lc *listController) calculateMaxVisibleItems(window *internal.Window) int32 {
@@ -1109,12 +1117,11 @@ func (lc *listController) calculateMaxVisibleItems(window *internal.Window) int3
 }
 
 func (lc *listController) measureText(font *ttf.Font, text string) int32 {
-	surface, _ := font.RenderUTF8Blended(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
-	if surface == nil {
+	w, _, err := font.SizeUTF8(text)
+	if err != nil {
 		return 0
 	}
-	defer surface.Free()
-	return surface.W
+	return int32(w)
 }
 
 func (lc *listController) truncateText(font *ttf.Font, text string, maxWidth int32) string {
