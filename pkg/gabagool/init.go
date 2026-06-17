@@ -1,6 +1,6 @@
 // Package gabagool provides a UI framework for building graphical applications
 // on embedded Linux devices, particularly handheld gaming consoles running
-// custom firmware like NextUI or Cannoli.
+// custom firmware like NextUI.
 //
 // The package handles SDL initialization, input processing, theming, and provides
 // various UI components including lists, detail views, keyboards, and dialogs.
@@ -14,7 +14,6 @@ import (
 
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/internal"
-	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/platform/cannoli"
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/platform/nextui"
 )
 
@@ -45,7 +44,6 @@ type Options struct {
 	ShowBackground       bool                   // Whether to render the theme background
 	WindowOptions        internal.WindowOptions // SDL window flags (borderless, resizable, etc.)
 	PrimaryThemeColorHex uint32                 // Custom accent color (ignored on NextUI which uses system theme)
-	IsCannoli            bool                   // Enable Cannoli CFW theming and input handling
 	IsNextUI             bool                   // Enable NextUI CFW theming and power button handling
 	ControllerConfigFile string                 // Path to custom controller mapping file
 	LogPath              string                 // Full path for log file including filename (creates parent directories)
@@ -107,10 +105,8 @@ func Init(options Options) {
 			ShutdownCommand: "/sbin/poweroff", // TODO: touch /tmp/poweroff and exit
 		}
 		internal.SetTheme(theme)
-	} else if options.IsCannoli {
-		internal.SetTheme(cannoli.InitCannoliTheme("/mnt/SDCARD/System/fonts/Cannoli.ttf"))
 	} else {
-		internal.SetTheme(cannoli.InitCannoliTheme("/mnt/SDCARD/System/fonts/Cannoli.ttf")) // TODO fix this
+		internal.SetTheme(internal.DefaultTheme())
 	}
 
 	if options.PrimaryThemeColorHex != 0 && !options.IsNextUI {

@@ -26,7 +26,7 @@ A Go-based UI library for building graphical interfaces on retro gaming handheld
 - **Thread-safe updates** - Atomic operations for progress bars, status text, visibility
 - **Responsive design** - Automatic scaling based on screen resolution
 - **Image support** - PNG, JPEG, and SVG rendering with scaling
-- **Platform support** - NextUI and Cannoli CFW theming integration
+- **Platform support** - NextUI CFW theming integration
 
 ---
 
@@ -67,7 +67,7 @@ func main() {
 	gaba.Init(gaba.Options{
 		WindowTitle:    "My App",
 		ShowBackground: true,
-		IsNextUI:       true, // or IsCannoli: true
+		IsNextUI:       true,
 	})
 	defer gaba.Close()
 
