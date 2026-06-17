@@ -21,6 +21,7 @@ type Window struct {
 	DisplayBackground  bool
 	PowerButtonWG      sync.WaitGroup
 	PowerButtonConfig  PowerButtonConfig
+	powerButtonStarted bool
 	hasVSync           bool
 	lastPresentTime    uint64
 	orientation        DisplayOrientation
@@ -159,6 +160,7 @@ func initWindowWithSize(title string, width, height int32, displayBackground boo
 
 func (window *Window) initPowerButtonHandling(pbc PowerButtonConfig) {
 	window.PowerButtonWG.Add(1)
+	window.powerButtonStarted = true
 
 	go PowerButtonHandler(&window.PowerButtonWG, pbc)
 }
@@ -177,9 +179,7 @@ func (window *Window) loadBackground() {
 }
 
 func (window *Window) closeWindow() {
-	if !constants.IsDevMode() {
-		window.PowerButtonWG.Done()
-	}
+	window.stopPowerButtonHandling()
 
 	if window.canvas != nil {
 		window.canvas.Destroy()
@@ -191,6 +191,18 @@ func (window *Window) closeWindow() {
 	window.Window.Destroy()
 
 	img.Quit()
+}
+
+// stopPowerButtonHandling releases the power-button WaitGroup, but only if a
+// handler was actually started. The handler (and its Add(1)) is started only
+// for non-dev, non-empty-DevicePath configs, so calling Done() unconditionally
+// drives the counter negative and panics on exit. Gating on powerButtonStarted
+// keeps Done() symmetric with Add(1) and makes repeat calls a safe no-op.
+func (window *Window) stopPowerButtonHandling() {
+	if window.powerButtonStarted {
+		window.PowerButtonWG.Done()
+		window.powerButtonStarted = false
+	}
 }
 
 func GetWindow() *Window {
