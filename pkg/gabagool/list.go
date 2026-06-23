@@ -1,6 +1,7 @@
 package gabagool
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -101,6 +102,7 @@ type listController struct {
 	itemScrollData  map[int]*internal.TextScrollData
 	titleScrollData *internal.TextScrollData
 	textureCache    *internal.TextureCache
+	textCache       *internal.TextureCache // cache of rendered text textures, keyed by text+color+font
 
 	directionalInput internal.DirectionalInput
 }
@@ -132,6 +134,7 @@ func newListController(options ListOptions) *listController {
 		itemScrollData:   make(map[int]*internal.TextScrollData),
 		titleScrollData:  &internal.TextScrollData{},
 		textureCache:     internal.NewTextureCache(),
+		textCache:        internal.NewTextureCacheWithSize(64),
 		directionalInput: internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 	}
 }
@@ -139,6 +142,9 @@ func newListController(options ListOptions) *listController {
 func (lc *listController) cleanup() {
 	if lc.textureCache != nil {
 		lc.textureCache.Destroy()
+	}
+	if lc.textCache != nil {
+		lc.textCache.Destroy()
 	}
 }
 
@@ -170,23 +176,15 @@ func List(options ListOptions) (*ListResult, error) {
 	}
 
 	for running {
-		// Use WaitEventTimeout to reduce CPU usage when idle
-		// 16ms timeout gives ~60fps max while allowing CPU to sleep
+		// Drain all queued events each frame so input bursts don't back up one-per-frame.
 		if event := sdl.WaitEventTimeout(16); event != nil {
-			switch event.(type) {
-			case *sdl.QuitEvent:
-				running = false
-			case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
-				lc.handleInput(event, &running, &result, &cancelled)
-			case *sdl.WindowEvent:
-				we := event.(*sdl.WindowEvent)
-				if we.Event == sdl.WINDOWEVENT_RESIZED {
-					newMaxItems := lc.calculateMaxVisibleItems(window)
-					lc.Options.MaxVisibleItems = int(newMaxItems)
-					if lc.Options.SelectedIndex >= lc.Options.VisibleStartIndex+lc.Options.MaxVisibleItems {
-						lc.scrollTo(lc.Options.SelectedIndex)
-					}
+			lc.dispatchEvent(window, event, &running, &result, &cancelled)
+			for running {
+				next := sdl.PollEvent()
+				if next == nil {
+					break
 				}
+				lc.dispatchEvent(window, next, &running, &result, &cancelled)
 			}
 		}
 
@@ -208,6 +206,25 @@ func List(options ListOptions) (*ListResult, error) {
 	}
 
 	return &result, nil
+}
+
+// dispatchEvent routes a single SDL event to the appropriate handler.
+func (lc *listController) dispatchEvent(window *internal.Window, event sdl.Event, running *bool, result *ListResult, cancelled *bool) {
+	switch event.(type) {
+	case *sdl.QuitEvent:
+		*running = false
+	case *sdl.KeyboardEvent, *sdl.ControllerButtonEvent, *sdl.ControllerAxisEvent, *sdl.JoyButtonEvent, *sdl.JoyAxisEvent, *sdl.JoyHatEvent:
+		lc.handleInput(event, running, result, cancelled)
+	case *sdl.WindowEvent:
+		we := event.(*sdl.WindowEvent)
+		if we.Event == sdl.WINDOWEVENT_RESIZED {
+			newMaxItems := lc.calculateMaxVisibleItems(window)
+			lc.Options.MaxVisibleItems = int(newMaxItems)
+			if lc.Options.SelectedIndex >= lc.Options.VisibleStartIndex+lc.Options.MaxVisibleItems {
+				lc.scrollTo(lc.Options.SelectedIndex)
+			}
+		}
+	}
 }
 
 func (lc *listController) handleInput(event interface{}, running *bool, result *ListResult, cancelled *bool) {
@@ -790,27 +807,44 @@ func (lc *listController) renderItemText(renderer *sdl.Renderer, font *ttf.Font,
 	}
 }
 
-func (lc *listController) renderStaticText(renderer *sdl.Renderer, font *ttf.Font, text string, color sdl.Color, itemY, pillHeight int32) {
-	scaleFactor := internal.GetScaleFactor()
+// getTextTexture returns a cached texture for text/color, rendering it once instead of every frame.
+func (lc *listController) getTextTexture(renderer *sdl.Renderer, font *ttf.Font, text string, color sdl.Color) (*sdl.Texture, int32, int32) {
+	key := fmt.Sprintf("%d|%02x%02x%02x%02x|%s", font.Height(), color.R, color.G, color.B, color.A, text)
+	if texture := lc.textCache.Get(key); texture != nil {
+		_, _, w, h, _ := texture.Query()
+		return texture, w, h
+	}
 
 	surface, _ := font.RenderUTF8Blended(text, color)
 	if surface == nil {
-		return
+		return nil, 0, 0
 	}
-	defer surface.Free()
+	w, h := surface.W, surface.H
 
 	texture, _ := renderer.CreateTextureFromSurface(surface)
+	surface.Free()
+	if texture == nil {
+		return nil, 0, 0
+	}
+
+	lc.textCache.Set(key, texture)
+	return texture, w, h
+}
+
+func (lc *listController) renderStaticText(renderer *sdl.Renderer, font *ttf.Font, text string, color sdl.Color, itemY, pillHeight int32) {
+	scaleFactor := internal.GetScaleFactor()
+
+	texture, w, h := lc.getTextTexture(renderer, font, text, color)
 	if texture == nil {
 		return
 	}
-	defer texture.Destroy()
 
 	textPadding := int32(float32(20) * scaleFactor)
 	destRect := sdl.Rect{
 		X: lc.Options.Margins.Left + textPadding,
-		Y: itemY + (pillHeight-surface.H)/2,
-		W: surface.W,
-		H: surface.H,
+		Y: itemY + (pillHeight-h)/2,
+		W: w,
+		H: h,
 	}
 
 	renderer.Copy(texture, nil, &destRect)
@@ -820,31 +854,24 @@ func (lc *listController) renderScrollingText(renderer *sdl.Renderer, font *ttf.
 	scaleFactor := internal.GetScaleFactor()
 	scrollData := lc.getOrCreateScrollData(globalIndex, text, font, maxWidth)
 
-	surface, _ := font.RenderUTF8Blended(text, color)
-	if surface == nil {
-		return
-	}
-	defer surface.Free()
-
-	texture, _ := renderer.CreateTextureFromSurface(surface)
+	texture, w, h := lc.getTextTexture(renderer, font, text, color)
 	if texture == nil {
 		return
 	}
-	defer texture.Destroy()
 
 	clipRect := &sdl.Rect{
 		X: scrollData.ScrollOffset,
 		Y: 0,
-		W: internal.Min32(maxWidth, surface.W-scrollData.ScrollOffset),
-		H: surface.H,
+		W: internal.Min32(maxWidth, w-scrollData.ScrollOffset),
+		H: h,
 	}
 
 	textPadding := int32(float32(20) * scaleFactor)
 	destRect := sdl.Rect{
 		X: lc.Options.Margins.Left + textPadding,
-		Y: itemY + (pillHeight-surface.H)/2,
+		Y: itemY + (pillHeight-h)/2,
 		W: clipRect.W,
-		H: surface.H,
+		H: h,
 	}
 
 	renderer.Copy(texture, clipRect, &destRect)
@@ -1050,15 +1077,14 @@ func (lc *listController) updateScrollData(data *internal.TextScrollData, curren
 func (lc *listController) getOrCreateScrollData(index int, text string, font *ttf.Font, maxWidth int32) *internal.TextScrollData {
 	data, exists := lc.itemScrollData[index]
 	if !exists {
-		surface, _ := font.RenderUTF8Blended(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
-		if surface == nil {
+		w, _, err := font.SizeUTF8(text)
+		if err != nil {
 			return &internal.TextScrollData{}
 		}
-		defer surface.Free()
 
 		data = &internal.TextScrollData{
-			NeedsScrolling: surface.W > maxWidth,
-			TextWidth:      surface.W,
+			NeedsScrolling: int32(w) > maxWidth,
+			TextWidth:      int32(w),
 			ContainerWidth: maxWidth,
 			Direction:      1,
 		}
@@ -1068,12 +1094,12 @@ func (lc *listController) getOrCreateScrollData(index int, text string, font *tt
 }
 
 func (lc *listController) shouldScroll(font *ttf.Font, text string, maxWidth int32) bool {
-	surface, _ := font.RenderUTF8Blended(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
-	if surface == nil {
+	// SizeUTF8 measures without rasterizing a surface (cheaper than RenderUTF8Blended).
+	w, _, err := font.SizeUTF8(text)
+	if err != nil {
 		return false
 	}
-	defer surface.Free()
-	return surface.W > maxWidth
+	return int32(w) > maxWidth
 }
 
 func (lc *listController) calculateMaxVisibleItems(window *internal.Window) int32 {
@@ -1108,12 +1134,11 @@ func (lc *listController) calculateMaxVisibleItems(window *internal.Window) int3
 }
 
 func (lc *listController) measureText(font *ttf.Font, text string) int32 {
-	surface, _ := font.RenderUTF8Blended(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
-	if surface == nil {
+	w, _, err := font.SizeUTF8(text)
+	if err != nil {
 		return 0
 	}
-	defer surface.Free()
-	return surface.W
+	return int32(w)
 }
 
 func (lc *listController) truncateText(font *ttf.Font, text string, maxWidth int32) string {
