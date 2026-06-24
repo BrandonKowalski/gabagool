@@ -57,6 +57,8 @@ type ListOptions struct {
 
 	OnSelect  func(index int, item *MenuItem) // Called when selection changes
 	OnReorder func(from, to int)              // Called when items are reordered
+	OnL1      func(selectedIndex int) int     // Custom handler for L1 button
+	OnR1      func(selectedIndex int) int     // Custom handler for R1 button
 }
 
 // DefaultListOptions returns a ListOptions with sensible defaults for the given title and items.
@@ -226,6 +228,32 @@ func (lc *listController) handleInput(event interface{}, running *bool, result *
 
 		if lc.ReorderMode && !lc.isDirectionalInput(inputEvent.Button) {
 			lc.ReorderMode = false
+			return
+		}
+
+		if !lc.MultiSelect && lc.Options.OnL1 != nil && inputEvent.Button == constants.VirtualButtonL1 {
+			newIdx := lc.Options.OnL1(lc.Options.SelectedIndex)
+			if newIdx >= 0 && newIdx < len(lc.Options.Items) {
+				lc.Options.SelectedIndex = newIdx
+				lc.scrollTo(newIdx)
+				lc.updateSelectionState()
+				if lc.Options.OnSelect != nil {
+					lc.Options.OnSelect(newIdx, &lc.Options.Items[newIdx])
+				}
+			}
+			return
+		}
+
+		if !lc.MultiSelect && lc.Options.OnR1 != nil && inputEvent.Button == constants.VirtualButtonR1 {
+			newIdx := lc.Options.OnR1(lc.Options.SelectedIndex)
+			if newIdx >= 0 && newIdx < len(lc.Options.Items) {
+				lc.Options.SelectedIndex = newIdx
+				lc.scrollTo(newIdx)
+				lc.updateSelectionState()
+				if lc.Options.OnSelect != nil {
+					lc.Options.OnSelect(newIdx, &lc.Options.Items[newIdx])
+				}
+			}
 			return
 		}
 
