@@ -41,6 +41,15 @@ type DownloadManagerOptions struct {
 	AutoContinueOnComplete bool // Exit automatically when all downloads complete without errors
 	MaxConcurrent          int  // Maximum concurrent downloads (default: 3)
 	SkipSSLVerification    bool // Bypass SSL certificate validation (for self-signed certs)
+
+	// Optional footer label overrides — when empty, the built-in
+	// English strings are used. Useful for callers that want to
+	// localise the download manager UI.
+	CloseText              string // default: "Close"
+	CancelDownloadText     string // default: "Cancel Download"
+	CancelAllDownloadsText string // default: "Cancel All Downloads"
+	ShowSpeedText          string // default: "Show Speed"
+	HideSpeedText          string // default: "Hide Speed"
 }
 
 type downloadJob struct {
@@ -83,6 +92,14 @@ type downloadManager struct {
 	insecureSkipVerify bool
 
 	showSpeed bool
+
+	// Footer label overrides (set from DownloadManagerOptions); empty
+	// means use the built-in English string.
+	closeText              string
+	cancelDownloadText     string
+	cancelAllDownloadsText string
+	showSpeedText          string
+	hideSpeedText          string
 }
 
 func newDownloadManager(downloads []Download, headers map[string]string) *downloadManager {
@@ -125,6 +142,11 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 		downloadManager.maxConcurrent = opts.MaxConcurrent
 	}
 	downloadManager.insecureSkipVerify = opts.SkipSSLVerification
+	downloadManager.closeText = opts.CloseText
+	downloadManager.cancelDownloadText = opts.CancelDownloadText
+	downloadManager.cancelAllDownloadsText = opts.CancelAllDownloadsText
+	downloadManager.showSpeedText = opts.ShowSpeedText
+	downloadManager.hideSpeedText = opts.HideSpeedText
 
 	result := DownloadResult{
 		Completed: []Download{},
@@ -574,19 +596,29 @@ func (dm *downloadManager) render(renderer *sdl.Renderer) {
 		}
 	}
 
+	pick := func(override, fallback string) string {
+		if override != "" {
+			return override
+		}
+		return fallback
+	}
+
 	var footerHelpItems []FooterHelpItem
 	if dm.isAllComplete {
-		footerHelpItems = append(footerHelpItems, FooterHelpItem{ButtonName: "A", HelpText: "Close"})
+		footerHelpItems = append(footerHelpItems, FooterHelpItem{
+			ButtonName: "A",
+			HelpText:   pick(dm.closeText, "Close"),
+		})
 	} else {
-		helpText := "Cancel Download"
+		helpText := pick(dm.cancelDownloadText, "Cancel Download")
 		if len(dm.downloads) > 1 {
-			helpText = "Cancel All Downloads"
+			helpText = pick(dm.cancelAllDownloadsText, "Cancel All Downloads")
 		}
 		footerHelpItems = append(footerHelpItems, FooterHelpItem{ButtonName: "Y", HelpText: helpText})
 
-		speedToggleText := "Show Speed"
+		speedToggleText := pick(dm.showSpeedText, "Show Speed")
 		if dm.showSpeed {
-			speedToggleText = "Hide Speed"
+			speedToggleText = pick(dm.hideSpeedText, "Hide Speed")
 		}
 		footerHelpItems = append(footerHelpItems, FooterHelpItem{ButtonName: "X", HelpText: speedToggleText})
 	}
