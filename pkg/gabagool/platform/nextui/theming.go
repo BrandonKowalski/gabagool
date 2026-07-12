@@ -112,8 +112,13 @@ func loadNextVal() (*NextVal, error) {
 	return &nextval, nil
 }
 
+// parseHexColor parses a hex color string from nextval. NextUI accepts both
+// legacy 6-digit "RRGGBB" (opaque) and 8-digit "RRGGBBAA" strings, deciding
+// the format by digit count rather than value, so we mirror that here.
 func parseHexColor(hexStr string) sdl.Color {
+	hexStr = strings.TrimSpace(hexStr)
 	hexStr = strings.TrimPrefix(hexStr, "0x")
+	hexStr = strings.TrimPrefix(hexStr, "0X")
 
 	hex, err := strconv.ParseUint(hexStr, 16, 32)
 	if err != nil {
@@ -125,5 +130,14 @@ func parseHexColor(hexStr string) sdl.Color {
 		}
 	}
 
-	return internal.HexToColor(uint32(hex))
+	if len(hexStr) <= 6 {
+		return internal.HexToColor(uint32(hex))
+	}
+
+	return sdl.Color{
+		R: uint8((hex >> 24) & 0xFF),
+		G: uint8((hex >> 16) & 0xFF),
+		B: uint8((hex >> 8) & 0xFF),
+		A: uint8(hex & 0xFF),
+	}
 }
