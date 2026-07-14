@@ -275,7 +275,17 @@ func DrawRoundedRect(renderer *sdl.Renderer, rect *sdl.Rect, radius int32, color
 		radius = maxRadius
 	}
 
-	// Use native SDL2_gfx rounded rectangle functions for smoother edges
+	if color.A == 255 {
+		drawRoundedRectPrimitives(renderer, rect, radius, color)
+		return
+	}
+
+	drawTranslucentShape(renderer, rect, color, func(localRect *sdl.Rect, opaqueColor sdl.Color) {
+		drawRoundedRectPrimitives(renderer, localRect, radius, opaqueColor)
+	})
+}
+
+func drawRoundedRectPrimitives(renderer *sdl.Renderer, rect *sdl.Rect, radius int32, color sdl.Color) {
 	x1 := rect.X
 	y1 := rect.Y
 	x2 := rect.X + rect.W - 1
@@ -286,6 +296,104 @@ func DrawRoundedRect(renderer *sdl.Renderer, rect *sdl.Rect, radius int32, color
 
 	// Add anti-aliased outline for smoother edges
 	gfx.RoundedRectangleColor(renderer, x1, y1, x2, y2, radius, color)
+}
+
+// DrawFilledCircle draws a filled circle with an anti-aliased edge.
+func DrawFilledCircle(renderer *sdl.Renderer, centerX, centerY, radius int32, color sdl.Color) {
+	// A circle of the given radius spans radius*2+1 pixels (inclusive of both
+	// the center row/column), not radius*2 - undersizing the bounding rect
+	// clips the AA edge on the right/bottom.
+	diameter := radius*2 + 1
+	rect := &sdl.Rect{X: centerX - radius, Y: centerY - radius, W: diameter, H: diameter}
+
+	if color.A == 255 {
+		drawFilledCirclePrimitives(renderer, centerX, centerY, radius, color)
+		return
+	}
+
+	drawTranslucentShape(renderer, rect, color, func(localRect *sdl.Rect, opaqueColor sdl.Color) {
+		drawFilledCirclePrimitives(renderer, radius, radius, radius, opaqueColor)
+	})
+}
+
+func drawFilledCirclePrimitives(renderer *sdl.Renderer, centerX, centerY, radius int32, color sdl.Color) {
+	gfx.FilledCircleColor(renderer, centerX, centerY, radius, color)
+
+	// Add anti-aliased outline(s) for smoother edges
+	gfx.AACircleColor(renderer, centerX, centerY, radius, color)
+	if radius > 2 {
+		gfx.AACircleColor(renderer, centerX, centerY, radius-1, color)
+	}
+}
+
+// drawTranslucentShape works around a class of SDL2_gfx artifacts where a
+// shape is rasterized as several overlapping filled/outline primitives (e.g.
+// a rounded box plus its outline, or a filled circle plus one or two AA
+// edges). SDL2_gfx's internal renderColor() helper forces
+// SDL_BLENDMODE_BLEND onto the renderer whenever alpha < 255 (only alpha ==
+// 255 gets BLENDMODE_NONE), so wherever those primitives overlap - a pill's
+// middle scanline, a circle's antialiased rim - the translucent color gets
+// composited twice and visibly brightens there, regardless of blend mode set
+// beforehand. Work around it by having `draw` render the shape fully opaque
+// (safe: opaque draws are idempotent under SDL2_gfx's own NONE-mode fast
+// path) onto a transparent scratch texture, then apply the real translucency
+// once via the texture's alpha modulation instead of the fill color.
+func drawTranslucentShape(renderer *sdl.Renderer, destRect *sdl.Rect, color sdl.Color, draw func(localRect *sdl.Rect, opaqueColor sdl.Color)) {
+	tex, err := getScratchTexture(renderer, destRect.W, destRect.H)
+	if err != nil {
+		draw(destRect, color)
+		return
+	}
+
+	prevTarget := renderer.GetRenderTarget()
+	var prevBlendMode sdl.BlendMode
+	renderer.GetDrawBlendMode(&prevBlendMode)
+
+	renderer.SetRenderTarget(tex)
+	// Clear() honors the current draw blend mode; with BLENDMODE_BLEND left
+	// over from an earlier draw, clearing to alpha 0 would be a no-op and
+	// leak whatever this cached texture held from its previous use.
+	renderer.SetDrawBlendMode(sdl.BLENDMODE_NONE)
+	renderer.SetDrawColor(0, 0, 0, 0)
+	renderer.Clear()
+
+	localRect := sdl.Rect{X: 0, Y: 0, W: destRect.W, H: destRect.H}
+	opaqueColor := sdl.Color{R: color.R, G: color.G, B: color.B, A: 255}
+	draw(&localRect, opaqueColor)
+
+	renderer.SetRenderTarget(prevTarget)
+	renderer.SetDrawBlendMode(prevBlendMode)
+
+	tex.SetBlendMode(sdl.BLENDMODE_BLEND)
+	tex.SetAlphaMod(color.A)
+	renderer.Copy(tex, &localRect, destRect)
+}
+
+var (
+	translucentScratchTexture *sdl.Texture
+	translucentScratchW       int32
+	translucentScratchH       int32
+)
+
+func getScratchTexture(renderer *sdl.Renderer, w, h int32) (*sdl.Texture, error) {
+	if translucentScratchTexture != nil && translucentScratchW >= w && translucentScratchH >= h {
+		return translucentScratchTexture, nil
+	}
+
+	if translucentScratchTexture != nil {
+		translucentScratchTexture.Destroy()
+	}
+
+	tex, err := renderer.CreateTexture(sdl.PIXELFORMAT_RGBA8888, sdl.TEXTUREACCESS_TARGET, w, h)
+	if err != nil {
+		translucentScratchTexture = nil
+		return nil, err
+	}
+
+	translucentScratchTexture = tex
+	translucentScratchW = w
+	translucentScratchH = h
+	return tex, nil
 }
 
 // DrawSmoothScrollbar renders a simple square scrollbar

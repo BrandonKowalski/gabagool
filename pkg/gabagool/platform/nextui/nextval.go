@@ -10,7 +10,7 @@ type NextVal struct {
 	Color4          string `json:"color4"`
 	Color5          string `json:"color5"`
 	Color6          string `json:"color6"`
-	BGColor         string `json:"bgcolor"`
+	BGColor         string `json:"color7"`
 	Radius          int    `json:"radius"`
 	ShowClock       int    `json:"showclock"`
 	Clock24h        int    `json:"clock24h"`

@@ -4,7 +4,6 @@ import (
 	"sync/atomic"
 
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/internal"
-	"github.com/veandco/go-sdl2/gfx"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 	uatomic "go.uber.org/atomic"
@@ -230,7 +229,7 @@ func renderGroupAsContinuousPill(
 		isCircle := innerPillWidth == innerPillHeight
 
 		if isCircle {
-			drawCircleShape(renderer, currentX+innerPillHeight/2, y+innerPillMargin+innerPillHeight/2, innerPillHeight/2, internal.GetTheme().HighlightColor)
+			internal.DrawFilledCircle(renderer, currentX+innerPillHeight/2, y+innerPillMargin+innerPillHeight/2, innerPillHeight/2, internal.GetTheme().HighlightColor)
 		} else {
 			innerPillRect := &sdl.Rect{
 				X: currentX,
@@ -271,33 +270,5 @@ func renderGroupAsContinuousPill(
 		currentX += helpSurface.W + rightPadding
 		buttonSurface.Free()
 		helpSurface.Free()
-	}
-}
-
-func drawCircleShape(renderer *sdl.Renderer, centerX, centerY, radius int32, color sdl.Color) {
-	gfx.FilledCircleColor(
-		renderer,
-		centerX,
-		centerY,
-		radius,
-		color,
-	)
-
-	gfx.AACircleColor(
-		renderer,
-		centerX,
-		centerY,
-		radius,
-		color,
-	)
-
-	if radius > 2 {
-		gfx.AACircleColor(
-			renderer,
-			centerX,
-			centerY,
-			radius-1,
-			color,
-		)
 	}
 }
