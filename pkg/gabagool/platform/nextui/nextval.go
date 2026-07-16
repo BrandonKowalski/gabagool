@@ -3,13 +3,15 @@ package nextui
 // NextVal represents the NextUI system configuration loaded from nextval.elf.
 // This structure matches the JSON output from the NextUI configuration utility.
 type NextVal struct {
-	Font            int    `json:"font"`
-	Color1          string `json:"color1"`
-	Color2          string `json:"color2"`
-	Color3          string `json:"color3"`
-	Color4          string `json:"color4"`
-	Color5          string `json:"color5"`
-	Color6          string `json:"color6"`
+	Font   int    `json:"font"`
+	Color1 string `json:"color1"`
+	Color2 string `json:"color2"`
+	Color3 string `json:"color3"`
+	Color4 string `json:"color4"`
+	Color5 string `json:"color5"`
+	Color6 string `json:"color6"`
+	// BGColor is NextUI's background color ("Background Color" / COLOR_BACKGROUND).
+	// Absent on builds predating the color7 setting; handled by resolveBackgroundColor.
 	BGColor         string `json:"color7"`
 	Radius          int    `json:"radius"`
 	ShowClock       int    `json:"showclock"`

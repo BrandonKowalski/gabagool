@@ -187,6 +187,9 @@ func (window *Window) closeWindow() {
 	if window.Background != nil {
 		window.Background.Destroy()
 	}
+	// Release the cached scratch texture before its owning renderer, otherwise
+	// the package-global cache dangles past this window's lifetime.
+	destroyScratchTexture()
 	window.Renderer.Destroy()
 	window.Window.Destroy()
 

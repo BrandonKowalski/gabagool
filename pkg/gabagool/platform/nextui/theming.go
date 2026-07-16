@@ -58,7 +58,7 @@ func InitNextUITheme() internal.Theme {
 		TextColor:            parseHexColor(nv.Color4),
 		HighlightedTextColor: parseHexColor(nv.Color5),
 		HintColor:            parseHexColor(nv.Color6),
-		BackgroundColor:      parseHexColor(nv.BGColor),
+		BackgroundColor:      resolveBackgroundColor(nv.BGColor),
 	}
 
 	if constants.IsDevMode() {
@@ -112,32 +112,66 @@ func loadNextVal() (*NextVal, error) {
 	return &nextval, nil
 }
 
-// parseHexColor parses a hex color string from nextval. NextUI accepts both
-// legacy 6-digit "RRGGBB" (opaque) and 8-digit "RRGGBBAA" strings, deciding
-// the format by digit count rather than value, so we mirror that here.
+// errorColor is returned for a non-background color that cannot be parsed. It
+// is deliberately conspicuous so a misconfigured theme is obvious on screen
+// while still leaving the rest of the UI usable.
+var errorColor = sdl.Color{R: 255, G: 0, B: 0, A: 255}
+
+// parseHexColor parses a color string from nextval, returning errorColor when
+// it cannot be parsed. Use resolveBackgroundColor for the background, whose
+// error color would fill the whole screen.
 func parseHexColor(hexStr string) sdl.Color {
+	if color, ok := tryParseHexColor(hexStr); ok {
+		return color
+	}
+	return errorColor
+}
+
+// resolveBackgroundColor parses the nextval background color, falling back to
+// the default theme's background (and logging a warning) when it is missing or
+// unparseable. Unlike other theme colors the background fills the entire
+// screen, so the errorColor sentinel would render an unusable solid-red UI;
+// the default is a sane, legible fallback instead. A missing value is expected
+// on NextUI builds predating the color7 background setting.
+func resolveBackgroundColor(hexStr string) sdl.Color {
+	if color, ok := tryParseHexColor(hexStr); ok {
+		return color
+	}
+	internal.GetInternalLogger().Warn(
+		"NextUI background color missing or unparseable; using default",
+		"value", hexStr,
+	)
+	return defaultTheme.BackgroundColor
+}
+
+// tryParseHexColor parses a hex color string from nextval. NextUI emits colors
+// as a quoted "0x%08X" RRGGBBAA string; builds predating alpha support emit
+// 6-digit RRGGBB. The format is decided by digit count rather than value, so we
+// mirror that here. Returns ok=false for anything it cannot parse.
+func tryParseHexColor(hexStr string) (sdl.Color, bool) {
 	hexStr = strings.TrimSpace(hexStr)
+	hexStr = strings.TrimPrefix(hexStr, "#")
 	hexStr = strings.TrimPrefix(hexStr, "0x")
 	hexStr = strings.TrimPrefix(hexStr, "0X")
 
 	hex, err := strconv.ParseUint(hexStr, 16, 32)
 	if err != nil {
+		return sdl.Color{}, false
+	}
+
+	switch len(hexStr) {
+	case 6:
+		// "RRGGBB" - legacy opaque format.
+		return internal.HexToColor(uint32(hex)), true
+	case 8:
+		// "RRGGBBAA" - NextUI's current format.
 		return sdl.Color{
-			R: 255,
-			G: 0,
-			B: 0,
-			A: 255,
-		}
-	}
-
-	if len(hexStr) <= 6 {
-		return internal.HexToColor(uint32(hex))
-	}
-
-	return sdl.Color{
-		R: uint8((hex >> 24) & 0xFF),
-		G: uint8((hex >> 16) & 0xFF),
-		B: uint8((hex >> 8) & 0xFF),
-		A: uint8(hex & 0xFF),
+			R: uint8((hex >> 24) & 0xFF),
+			G: uint8((hex >> 16) & 0xFF),
+			B: uint8((hex >> 8) & 0xFF),
+			A: uint8(hex & 0xFF),
+		}, true
+	default:
+		return sdl.Color{}, false
 	}
 }
