@@ -311,8 +311,13 @@ func DrawFilledCircle(renderer *sdl.Renderer, centerX, centerY, radius int32, co
 		return
 	}
 
+	// Derive the center from localRect so both paths are correct: on the
+	// scratch texture localRect is at the origin (center radius,radius), and on
+	// the fallback path (drawTranslucentShape draws straight to destRect when
+	// the scratch texture is unavailable) localRect is destRect and the circle
+	// lands back at centerX,centerY instead of the screen corner.
 	drawTranslucentShape(renderer, rect, color, func(localRect *sdl.Rect, opaqueColor sdl.Color) {
-		drawFilledCirclePrimitives(renderer, radius, radius, radius, opaqueColor)
+		drawFilledCirclePrimitives(renderer, localRect.X+radius, localRect.Y+radius, radius, opaqueColor)
 	})
 }
 
@@ -349,12 +354,24 @@ func drawTranslucentShape(renderer *sdl.Renderer, destRect *sdl.Rect, color sdl.
 	var prevBlendMode sdl.BlendMode
 	renderer.GetDrawBlendMode(&prevBlendMode)
 
-	renderer.SetRenderTarget(tex)
+	if err := renderer.SetRenderTarget(tex); err != nil {
+		// The target is left unchanged on failure, so it is safe to fall back
+		// to drawing straight to the real target rather than blitting garbage.
+		draw(destRect, color)
+		return
+	}
 	// Clear() honors the current draw blend mode; with BLENDMODE_BLEND left
-	// over from an earlier draw, clearing to alpha 0 would be a no-op and
-	// leak whatever this cached texture held from its previous use.
+	// over from an earlier draw, clearing would blend against (not overwrite)
+	// whatever this cached texture held from its previous use and leak it
+	// through, so force NONE first. Clear to the shape's own chroma at alpha 0
+	// rather than transparent black: the AA rim pixels are rasterized with
+	// coverage-weighted alpha and so still pass through BLENDMODE_BLEND when
+	// copied out. Blending them against a matching-chroma, zero-alpha
+	// background reconstructs the correct non-premultiplied color
+	// (C*w + C*(1-w) = C); clearing to black instead would leave a dark fringe
+	// (C*w against 0) around the shape.
 	renderer.SetDrawBlendMode(sdl.BLENDMODE_NONE)
-	renderer.SetDrawColor(0, 0, 0, 0)
+	renderer.SetDrawColor(color.R, color.G, color.B, 0)
 	renderer.Clear()
 
 	localRect := sdl.Rect{X: 0, Y: 0, W: destRect.W, H: destRect.H}
@@ -380,6 +397,16 @@ func getScratchTexture(renderer *sdl.Renderer, w, h int32) (*sdl.Texture, error)
 		return translucentScratchTexture, nil
 	}
 
+	// Grow to cover both the cached and requested dimensions on each axis so
+	// alternating aspect ratios (a tall pill then a wide one) don't destroy and
+	// recreate the texture every frame.
+	if translucentScratchW > w {
+		w = translucentScratchW
+	}
+	if translucentScratchH > h {
+		h = translucentScratchH
+	}
+
 	if translucentScratchTexture != nil {
 		translucentScratchTexture.Destroy()
 	}
@@ -387,6 +414,8 @@ func getScratchTexture(renderer *sdl.Renderer, w, h int32) (*sdl.Texture, error)
 	tex, err := renderer.CreateTexture(sdl.PIXELFORMAT_RGBA8888, sdl.TEXTUREACCESS_TARGET, w, h)
 	if err != nil {
 		translucentScratchTexture = nil
+		translucentScratchW = 0
+		translucentScratchH = 0
 		return nil, err
 	}
 
@@ -394,6 +423,19 @@ func getScratchTexture(renderer *sdl.Renderer, w, h int32) (*sdl.Texture, error)
 	translucentScratchW = w
 	translucentScratchH = h
 	return tex, nil
+}
+
+// destroyScratchTexture releases the cached scratch texture and resets the
+// cache. It must run before the renderer that owns the texture is destroyed:
+// the cache is a package global that outlives any single window, so a later
+// reuse would otherwise hand a freed texture back to SDL.
+func destroyScratchTexture() {
+	if translucentScratchTexture != nil {
+		translucentScratchTexture.Destroy()
+		translucentScratchTexture = nil
+		translucentScratchW = 0
+		translucentScratchH = 0
+	}
 }
 
 // DrawSmoothScrollbar renders a simple square scrollbar
