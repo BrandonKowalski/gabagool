@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/BrandonKowalski/gabagool/v2/pkg/gabagool/constants"
@@ -154,6 +155,50 @@ func DefaultInputMapping() *InputMapping {
 	}
 }
 
+// h700InputMappingJSON is the default input mapping for h700 devices, whose
+// pad presents as a raw SDL joystick (not a recognized game controller), so the
+// generic DefaultInputMapping does not cover its buttons or d-pad hat.
+const h700InputMappingJSON = `{
+  "keyboard_map": {},
+  "controller_button_map": {},
+  "controller_hat_map": {},
+  "joystick_axis_map": {},
+  "joystick_button_map": {
+    "10": 13,
+    "11": 15,
+    "12": 10,
+    "13": 12,
+    "3": 5,
+    "4": 6,
+    "5": 8,
+    "6": 7,
+    "7": 9,
+    "8": 11,
+    "9": 14
+  },
+  "joystick_hat_map": {
+    "1": 1,
+    "2": 4,
+    "4": 2,
+    "8": 3
+  }
+}`
+
+// platformDefaultInputMapping returns a platform-specific default mapping when
+// the current PLATFORM needs one, otherwise the generic DefaultInputMapping.
+// This is the lowest-precedence source: explicit overrides (embedded bytes or
+// the INPUT_MAPPING_PATH env var) still take priority in GetInputMapping.
+func platformDefaultInputMapping() *InputMapping {
+	platformEnv := strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM")))
+	if strings.Contains(platformEnv, "h700") {
+		if m, err := LoadInputMappingFromBytes([]byte(h700InputMappingJSON)); err == nil {
+			return m
+		}
+		GetInternalLogger().Warn("Failed to load h700 input mapping, using default")
+	}
+	return DefaultInputMapping()
+}
+
 // GetInputMapping returns the input mapping from embedded bytes if set,
 // from the environment variable if set, otherwise returns the default mapping.
 // If FlipFaceButtons is enabled (via SetFlipFaceButtons or FLIP_FACE_BUTTONS env var),
@@ -187,7 +232,7 @@ func GetInputMapping() *InputMapping {
 	}
 
 	if mapping == nil {
-		mapping = DefaultInputMapping()
+		mapping = platformDefaultInputMapping()
 	}
 
 	// Check if face buttons should be flipped to direct mapping
