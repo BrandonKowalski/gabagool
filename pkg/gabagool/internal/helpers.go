@@ -19,13 +19,11 @@ type TextScrollData struct {
 	LastDirectionChange *time.Time
 }
 
-func RenderMultilineText(renderer *sdl.Renderer, text string, font *ttf.Font, maxWidth int32, x, startY int32, color sdl.Color, alignment ...constants.TextAlign) {
-
-	textAlign := constants.TextAlignCenter
-	if len(alignment) > 0 {
-		textAlign = alignment[0]
-	}
-
+// wrapTextToLines splits text into rendered lines, wrapping on word
+// boundaries so no line exceeds maxWidth. Explicit newlines are preserved as
+// blank lines. It is the shared basis for RenderMultilineText and
+// MultilineTextHeight so measurement and rendering always agree.
+func wrapTextToLines(text string, font *ttf.Font, maxWidth int32, color sdl.Color) []string {
 	normalized := strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 	paragraphs := strings.Split(normalized, "\n")
 	var lines []string
@@ -52,11 +50,12 @@ func RenderMultilineText(renderer *sdl.Renderer, text string, font *ttf.Font, ma
 				continue
 			}
 
-			if testSurface.W <= maxWidth {
-				currentLine = testLine
-				testSurface.Free()
-			} else {
+			fits := testSurface.W <= maxWidth
+			testSurface.Free()
 
+			if fits {
+				currentLine = testLine
+			} else {
 				lines = append(lines, currentLine)
 				currentLine = word
 			}
@@ -66,6 +65,44 @@ func RenderMultilineText(renderer *sdl.Renderer, text string, font *ttf.Font, ma
 			lines = append(lines, currentLine)
 		}
 	}
+
+	return lines
+}
+
+// StackedLayout positions an image above a block of text as a single group
+// centered vertically within a window of height winH. gap is the space between
+// the image's bottom and the text's top. It returns the image's top Y and the
+// text block's vertical center (the startY that RenderMultilineText's
+// center alignment expects). If the group is taller than the window the image
+// is pinned to the top so it stays on-screen.
+func StackedLayout(winH, imgH, textH, gap int32) (imgY, textCenterY int32) {
+	blockH := imgH + gap + textH
+	top := (winH - blockH) / 2
+	if top < 0 {
+		top = 0
+	}
+	return top, top + imgH + gap + textH/2
+}
+
+// MultilineTextHeight returns the pixel height RenderMultilineText uses to
+// vertically position text with the given font and maxWidth. Callers that
+// stack text beneath other content use it to lay the two out without overlap.
+func MultilineTextHeight(text string, font *ttf.Font, maxWidth int32) int32 {
+	lines := wrapTextToLines(text, font, maxWidth, sdl.Color{R: 255, G: 255, B: 255, A: 255})
+	if len(lines) == 0 {
+		return 0
+	}
+	return int32(font.Height()) * int32(len(lines))
+}
+
+func RenderMultilineText(renderer *sdl.Renderer, text string, font *ttf.Font, maxWidth int32, x, startY int32, color sdl.Color, alignment ...constants.TextAlign) {
+
+	textAlign := constants.TextAlignCenter
+	if len(alignment) > 0 {
+		textAlign = alignment[0]
+	}
+
+	lines := wrapTextToLines(text, font, maxWidth, color)
 
 	if len(lines) == 0 {
 		return

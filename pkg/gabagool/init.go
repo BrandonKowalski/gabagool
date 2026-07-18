@@ -81,6 +81,7 @@ func Init(options Options) {
 		// tg5040: /dev/input/event1 for power button, button code 116.
 		// tg5050: /dev/input/event2 for power button, button code 116.
 		// my355:  /dev/input/event2 for power button, button code 102.
+		// h700:   /dev/input/event0 for power button, button code 116.
 		powerDevicePath := "/dev/input/unknown"
 		powerButtonCode := -1 // BUTTON_NA
 
@@ -94,6 +95,9 @@ func Init(options Options) {
 		} else if strings.Contains(platformEnv, "my355") {
 			powerDevicePath = "/dev/input/event2"
 			powerButtonCode = 102 // CODE_POWER for my355
+		} else if strings.Contains(platformEnv, "h700") {
+			powerDevicePath = "/dev/input/event0"
+			powerButtonCode = 116 // BUTTON_POWER
 		}
 
 		pbc = internal.PowerButtonConfig{

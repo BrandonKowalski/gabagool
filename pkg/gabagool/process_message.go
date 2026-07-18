@@ -177,6 +177,35 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 	return result, nil
 }
 
+// imageDrawSize returns the width and height at which the image should be
+// drawn, scaled down to fit the window while preserving aspect ratio.
+func (p *processMessage) imageDrawSize() (int32, int32) {
+	width := p.imageWidth
+	height := p.imageHeight
+
+	if width == 0 {
+		width = p.window.GetWidth()
+	}
+	if height == 0 {
+		height = p.window.GetHeight()
+	}
+
+	windowWidth := p.window.GetWidth()
+	windowHeight := p.window.GetHeight()
+	if width > windowWidth || height > windowHeight {
+		scaleX := float64(windowWidth) / float64(width)
+		scaleY := float64(windowHeight) / float64(height)
+		scale := scaleX
+		if scaleY < scaleX {
+			scale = scaleY
+		}
+		width = int32(float64(width) * scale)
+		height = int32(float64(height) * scale)
+	}
+
+	return width, height
+}
+
 func (p *processMessage) render(renderer *sdl.Renderer) {
 
 	if p.showBG && internal.GetWindow().Background != nil {
@@ -186,54 +215,48 @@ func (p *processMessage) render(renderer *sdl.Renderer) {
 		renderer.Clear()
 	}
 
+	font := internal.Fonts.SmallFont
+	maxWidth := p.window.GetWidth() * 3 / 4
+	winW := p.window.GetWidth()
+	winH := p.window.GetHeight()
+	white := sdl.Color{R: 255, G: 255, B: 255, A: 255}
+
+	var imgW, imgH int32
 	if p.imageTexture != nil {
-		width := p.imageWidth
-		height := p.imageHeight
-
-		if width == 0 {
-			width = p.window.GetWidth()
-		}
-
-		if height == 0 {
-			height = p.window.GetHeight()
-		}
-
-		// Scale down to fit within the window, preserving aspect ratio
-		windowWidth := p.window.GetWidth()
-		windowHeight := p.window.GetHeight()
-		if width > windowWidth || height > windowHeight {
-			scaleX := float64(windowWidth) / float64(width)
-			scaleY := float64(windowHeight) / float64(height)
-			scale := scaleX
-			if scaleY < scaleX {
-				scale = scaleY
-			}
-			width = int32(float64(width) * scale)
-			height = int32(float64(height) * scale)
-		}
-
-		x := (windowWidth - width) / 2
-		y := (windowHeight - height) / 2
-
-		renderer.Copy(p.imageTexture, nil, &sdl.Rect{X: x, Y: y, W: width, H: height})
+		imgW, imgH = p.imageDrawSize()
 	}
 
-	font := internal.Fonts.SmallFont
+	messagePresent := strings.TrimSpace(p.message) != ""
 
-	maxWidth := p.window.GetWidth() * 3 / 4
-
-	messageY := p.window.GetHeight() / 2
-	spacing := int32(5)
-	if p.showProgressBar {
+	switch {
+	case p.showProgressBar:
+		if p.imageTexture != nil {
+			renderer.Copy(p.imageTexture, nil, &sdl.Rect{X: (winW - imgW) / 2, Y: (winH - imgH) / 2, W: imgW, H: imgH})
+		}
+		spacing := int32(5)
 		barHeight := int32(40)
 		totalHeight := (int32(font.Height()) * 2) + spacing + barHeight
-		messageY = (p.window.GetHeight() - totalHeight) / 2
-	}
-
-	internal.RenderMultilineText(renderer, p.message, font, maxWidth, p.window.GetWidth()/2, messageY, sdl.Color{R: 255, G: 255, B: 255, A: 255})
-
-	if p.showProgressBar {
+		messageY := (winH - totalHeight) / 2
+		internal.RenderMultilineText(renderer, p.message, font, maxWidth, winW/2, messageY, white)
 		p.renderProgressBar(renderer, messageY, spacing)
+
+	case p.imageTexture != nil && messagePresent:
+		// Stack the image above the message as one vertically-centered group so
+		// the two never overlap — they otherwise both anchor to the window's
+		// midpoint and draw on top of each other.
+		const gap = 24
+		textH := internal.MultilineTextHeight(p.message, font, maxWidth)
+		imgY, textCenterY := internal.StackedLayout(winH, imgH, textH, gap)
+		renderer.Copy(p.imageTexture, nil, &sdl.Rect{X: (winW - imgW) / 2, Y: imgY, W: imgW, H: imgH})
+		internal.RenderMultilineText(renderer, p.message, font, maxWidth, winW/2, textCenterY, white)
+
+	default:
+		if p.imageTexture != nil {
+			renderer.Copy(p.imageTexture, nil, &sdl.Rect{X: (winW - imgW) / 2, Y: (winH - imgH) / 2, W: imgW, H: imgH})
+		}
+		if messagePresent {
+			internal.RenderMultilineText(renderer, p.message, font, maxWidth, winW/2, winH/2, white)
+		}
 	}
 
 	if len(p.footerHelpItems) > 0 {
