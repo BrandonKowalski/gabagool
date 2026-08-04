@@ -821,24 +821,17 @@ func (lc *listController) renderItemText(renderer *sdl.Renderer, font *ttf.Font,
 func (lc *listController) renderStaticText(renderer *sdl.Renderer, font *ttf.Font, text string, color sdl.Color, itemY, pillHeight int32) {
 	scaleFactor := internal.GetScaleFactor()
 
-	surface, _ := font.RenderUTF8Blended(text, color)
-	if surface == nil {
-		return
-	}
-	defer surface.Free()
-
-	texture, _ := renderer.CreateTextureFromSurface(surface)
+	texture, textW, textH := internal.RenderTextCached(renderer, font, text, color)
 	if texture == nil {
 		return
 	}
-	defer texture.Destroy()
 
 	textPadding := int32(float32(20) * scaleFactor)
 	destRect := sdl.Rect{
 		X: lc.Options.Margins.Left + textPadding,
-		Y: itemY + (pillHeight-surface.H)/2,
-		W: surface.W,
-		H: surface.H,
+		Y: itemY + (pillHeight-textH)/2,
+		W: textW,
+		H: textH,
 	}
 
 	renderer.Copy(texture, nil, &destRect)
@@ -848,31 +841,26 @@ func (lc *listController) renderScrollingText(renderer *sdl.Renderer, font *ttf.
 	scaleFactor := internal.GetScaleFactor()
 	scrollData := lc.getOrCreateScrollData(globalIndex, text, font, maxWidth)
 
-	surface, _ := font.RenderUTF8Blended(text, color)
-	if surface == nil {
-		return
-	}
-	defer surface.Free()
-
-	texture, _ := renderer.CreateTextureFromSurface(surface)
+	// The texture is the full width of the text and never changes; only the
+	// source rectangle moves as it scrolls, so it caches just as well.
+	texture, textW, textH := internal.RenderTextCached(renderer, font, text, color)
 	if texture == nil {
 		return
 	}
-	defer texture.Destroy()
 
 	clipRect := &sdl.Rect{
 		X: scrollData.ScrollOffset,
 		Y: 0,
-		W: internal.Min32(maxWidth, surface.W-scrollData.ScrollOffset),
-		H: surface.H,
+		W: internal.Min32(maxWidth, textW-scrollData.ScrollOffset),
+		H: textH,
 	}
 
 	textPadding := int32(float32(20) * scaleFactor)
 	destRect := sdl.Rect{
 		X: lc.Options.Margins.Left + textPadding,
-		Y: itemY + (pillHeight-surface.H)/2,
+		Y: itemY + (pillHeight-textH)/2,
 		W: clipRect.W,
-		H: surface.H,
+		H: textH,
 	}
 
 	renderer.Copy(texture, clipRect, &destRect)
@@ -892,27 +880,19 @@ func (lc *listController) renderEmptyMessage(renderer *sdl.Renderer, font *ttf.F
 			continue
 		}
 
-		surface, _ := font.RenderUTF8Blended(line, lc.Options.EmptyMessageColor)
-		if surface == nil {
-			continue
-		}
-
-		texture, _ := renderer.CreateTextureFromSurface(surface)
+		texture, w, h := internal.RenderTextCached(renderer, font, line, lc.Options.EmptyMessageColor)
 		if texture == nil {
-			surface.Free()
 			continue
 		}
 
 		rect := sdl.Rect{
-			X: (screenWidth - surface.W) / 2,
+			X: (screenWidth - w) / 2,
 			Y: centerY + int32(i)*lineHeight,
-			W: surface.W,
-			H: surface.H,
+			W: w,
+			H: h,
 		}
 
 		renderer.Copy(texture, nil, &rect)
-		texture.Destroy()
-		surface.Free()
 	}
 }
 
@@ -980,39 +960,32 @@ func (lc *listController) renderSelectedItemImage(renderer *sdl.Renderer, imageF
 }
 
 func (lc *listController) renderScrollableTitle(renderer *sdl.Renderer, font *ttf.Font, title string, align constants.TextAlign, startY, marginLeft, statusBarWidth int32) int32 {
-	surface, _ := font.RenderUTF8Blended(title, internal.GetTheme().TextColor)
-	if surface == nil {
-		return startY + 40
-	}
-	defer surface.Free()
-
-	texture, _ := renderer.CreateTextureFromSurface(surface)
+	texture, titleW, titleH := internal.RenderTextCached(renderer, font, title, internal.GetTheme().TextColor)
 	if texture == nil {
 		return startY + 40
 	}
-	defer texture.Destroy()
 
 	screenWidth, _, _ := renderer.GetOutputSize()
 	availableWidth := screenWidth - (marginLeft * 2) - statusBarWidth
 
-	if surface.W > availableWidth {
-		lc.renderScrollingTitle(renderer, texture, surface.H, availableWidth, marginLeft, startY)
+	if titleW > availableWidth {
+		lc.renderScrollingTitle(renderer, texture, titleH, availableWidth, marginLeft, startY)
 	} else {
 		var titleX int32
 		switch align {
 		case constants.TextAlignCenter:
-			titleX = (screenWidth - surface.W) / 2
+			titleX = (screenWidth - titleW) / 2
 		case constants.TextAlignRight:
-			titleX = screenWidth - surface.W - marginLeft
+			titleX = screenWidth - titleW - marginLeft
 		default:
 			titleX = marginLeft
 		}
 
-		rect := sdl.Rect{X: titleX, Y: startY, W: surface.W, H: surface.H}
+		rect := sdl.Rect{X: titleX, Y: startY, W: titleW, H: titleH}
 		renderer.Copy(texture, nil, &rect)
 	}
 
-	return startY + surface.H
+	return startY + titleH
 }
 
 func (lc *listController) renderScrollingTitle(renderer *sdl.Renderer, texture *sdl.Texture, textHeight, maxWidth, titleX, titleY int32) {

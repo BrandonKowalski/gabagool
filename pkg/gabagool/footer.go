@@ -127,7 +127,7 @@ func renderFooter(
 
 	if len(leftItems) > 0 {
 		if len(footerHelpItems) == 1 && centerSingleItem {
-			pillWidth := calculateContinuousPillWidth(font, leftItems, outerPillHeight, innerPillMargin)
+			pillWidth := calculateContinuousPillWidth(renderer, font, leftItems, outerPillHeight, innerPillMargin)
 			centerX := (windowWidth - pillWidth) / 2
 			renderGroupAsContinuousPill(renderer, font, leftItems, centerX, y, outerPillHeight, innerPillMargin)
 		} else {
@@ -135,50 +135,48 @@ func renderFooter(
 		}
 	}
 	if len(rightItems) > 0 {
-		rightGroupWidth := calculateContinuousPillWidth(font, rightItems, outerPillHeight, innerPillMargin)
+		rightGroupWidth := calculateContinuousPillWidth(renderer, font, rightItems, outerPillHeight, innerPillMargin)
 		rightX := windowWidth - bottomPadding - rightGroupWidth
 		renderGroupAsContinuousPill(renderer, font, rightItems, rightX, y, outerPillHeight, innerPillMargin)
 	}
 }
 
-func calculateContinuousPillWidth(font *ttf.Font, items []FooterHelpItem, outerPillHeight, innerPillMargin int32) int32 {
+func calculateContinuousPillWidth(renderer *sdl.Renderer, font *ttf.Font, items []FooterHelpItem, outerPillHeight, innerPillMargin int32) int32 {
 	scaleFactor := internal.GetScaleFactor()
 	var totalWidth = int32(float32(10) * scaleFactor)
 
 	innerPillHeight := outerPillHeight - (innerPillMargin * 2)
 
 	for i, item := range items {
-		buttonSurface, err := font.RenderUTF8Blended(item.ButtonName, internal.GetTheme().HighlightColor)
-		if err != nil {
+		// Measured with the same colours the drawing pass uses, so both share
+		// one cache entry per string instead of shaping the text twice.
+		buttonTexture, buttonW, _ := internal.RenderTextCached(renderer, font, item.ButtonName, internal.GetTheme().ButtonLabelColor)
+		if buttonTexture == nil {
 			continue
 		}
 
-		helpSurface, err := font.RenderUTF8Blended(item.GetHelpText(), internal.GetTheme().AccentColor)
-		if err != nil || helpSurface == nil {
-			buttonSurface.Free()
+		helpTexture, helpW, _ := internal.RenderTextCached(renderer, font, item.GetHelpText(), internal.GetTheme().HintColor)
+		if helpTexture == nil {
 			continue
 		}
 
-		innerPillWidth := calculateInnerPillWidth(buttonSurface, innerPillHeight)
+		innerPillWidth := calculateInnerPillWidth(buttonW, innerPillHeight)
 
-		itemWidth := innerPillWidth + 15 + helpSurface.W
+		itemWidth := innerPillWidth + 15 + helpW
 		totalWidth += itemWidth
 		if i < len(items)-1 {
 			totalWidth += 20
 		}
-		buttonSurface.Free()
-		helpSurface.Free()
 	}
 	totalWidth += int32(float32(10) * scaleFactor)
 	return totalWidth
 }
 
-func calculateInnerPillWidth(buttonSurface *sdl.Surface, innerPillHeight int32) int32 {
-	if buttonSurface.W <= innerPillHeight-20 {
+func calculateInnerPillWidth(buttonWidth, innerPillHeight int32) int32 {
+	if buttonWidth <= innerPillHeight-20 {
 		return innerPillHeight
-	} else {
-		return buttonSurface.W + 20
 	}
+	return buttonWidth + 20
 }
 
 func renderGroupAsContinuousPill(
@@ -193,7 +191,7 @@ func renderGroupAsContinuousPill(
 		return
 	}
 	scaleFactor := internal.GetScaleFactor()
-	pillWidth := calculateContinuousPillWidth(font, items, outerPillHeight, innerPillMargin)
+	pillWidth := calculateContinuousPillWidth(renderer, font, items, outerPillHeight, innerPillMargin)
 	outerPillRect := &sdl.Rect{
 		X: startX,
 		Y: y,
@@ -214,18 +212,17 @@ func renderGroupAsContinuousPill(
 	rightPadding := int32(float32(30) * paddingFactor)
 
 	for _, item := range items {
-		buttonSurface, err := font.RenderUTF8Blended(item.ButtonName, internal.GetTheme().ButtonLabelColor)
-		if err != nil || buttonSurface == nil {
+		buttonTexture, buttonW, buttonH := internal.RenderTextCached(renderer, font, item.ButtonName, internal.GetTheme().ButtonLabelColor)
+		if buttonTexture == nil {
 			continue
 		}
 
-		helpSurface, err := font.RenderUTF8Blended(item.GetHelpText(), internal.GetTheme().HintColor)
-		if err != nil || helpSurface == nil {
-			buttonSurface.Free()
+		helpTexture, helpW, helpH := internal.RenderTextCached(renderer, font, item.GetHelpText(), internal.GetTheme().HintColor)
+		if helpTexture == nil {
 			continue
 		}
 
-		innerPillWidth := calculateInnerPillWidth(buttonSurface, innerPillHeight)
+		innerPillWidth := calculateInnerPillWidth(buttonW, innerPillHeight)
 		isCircle := innerPillWidth == innerPillHeight
 
 		if isCircle {
@@ -241,34 +238,24 @@ func renderGroupAsContinuousPill(
 			internal.DrawRoundedRect(renderer, innerPillRect, cornerRadiusInner, internal.GetTheme().HighlightColor)
 		}
 
-		buttonTexture, err := renderer.CreateTextureFromSurface(buttonSurface)
-		if err == nil {
-			buttonTextRect := &sdl.Rect{
-				X: currentX + (innerPillWidth-buttonSurface.W)/2,
-				Y: y + innerPillMargin + (innerPillHeight-buttonSurface.H)/2,
-				W: buttonSurface.W,
-				H: buttonSurface.H,
-			}
-			renderer.Copy(buttonTexture, nil, buttonTextRect)
-			buttonTexture.Destroy()
+		buttonTextRect := &sdl.Rect{
+			X: currentX + (innerPillWidth-buttonW)/2,
+			Y: y + innerPillMargin + (innerPillHeight-buttonH)/2,
+			W: buttonW,
+			H: buttonH,
 		}
+		renderer.Copy(buttonTexture, nil, buttonTextRect)
 
 		currentX += innerPillWidth + int32(float32(10)*scaleFactor)
 
-		helpTexture, err := renderer.CreateTextureFromSurface(helpSurface)
-		if err == nil {
-			helpTextRect := &sdl.Rect{
-				X: currentX,
-				Y: y + (outerPillHeight-helpSurface.H)/2,
-				W: helpSurface.W,
-				H: helpSurface.H,
-			}
-			renderer.Copy(helpTexture, nil, helpTextRect)
-			helpTexture.Destroy()
+		helpTextRect := &sdl.Rect{
+			X: currentX,
+			Y: y + (outerPillHeight-helpH)/2,
+			W: helpW,
+			H: helpH,
 		}
+		renderer.Copy(helpTexture, nil, helpTextRect)
 
-		currentX += helpSurface.W + rightPadding
-		buttonSurface.Free()
-		helpSurface.Free()
+		currentX += helpW + rightPadding
 	}
 }

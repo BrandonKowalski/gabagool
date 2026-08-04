@@ -32,8 +32,13 @@ func (c *TextureCache) Get(key string) *sdl.Texture {
 }
 
 func (c *TextureCache) Set(key string, texture *sdl.Texture) {
-	// If key already exists, just update and move to end
-	if _, exists := c.textures[key]; exists {
+	// If key already exists, replace it — destroying the texture being
+	// displaced, which otherwise leaks: nothing else holds a reference to it
+	// once the map entry is overwritten.
+	if existing, exists := c.textures[key]; exists {
+		if existing != texture && existing != nil {
+			existing.Destroy()
+		}
 		c.textures[key] = texture
 		c.moveToEnd(key)
 		return

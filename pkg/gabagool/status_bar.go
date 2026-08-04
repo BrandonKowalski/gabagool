@@ -292,20 +292,15 @@ func renderStatusBarTime(
 	rightX, y int32,
 ) int32 {
 	textColor := internal.GetTheme().HintColor
-	surface, err := font.RenderUTF8Blended(timeText, textColor)
-	if err != nil || surface == nil {
+	// Cached. The clock is redrawn on every frame but only changes once a
+	// minute, so this rebuilds a texture roughly 3600 times less often.
+	texture, w, h := internal.RenderTextCached(renderer, font, timeText, textColor)
+	if texture == nil {
 		return rightX
 	}
-	defer surface.Free()
 
-	texture, err := renderer.CreateTextureFromSurface(surface)
-	if err != nil {
-		return rightX
-	}
-	defer texture.Destroy()
-
-	textX := rightX - surface.W
-	rect := sdl.Rect{X: textX, Y: y, W: surface.W, H: surface.H}
+	textX := rightX - w
+	rect := sdl.Rect{X: textX, Y: y, W: w, H: h}
 	renderer.Copy(texture, nil, &rect)
 
 	return textX
@@ -330,22 +325,15 @@ func renderStatusBarIcon(
 	}
 
 	textColor := internal.GetTheme().HintColor
-	surface, err := font.RenderUTF8Blended(text, textColor)
-	if err != nil || surface == nil {
+	texture, w, h := internal.RenderTextCached(renderer, font, text, textColor)
+	if texture == nil {
 		return rightX
 	}
-	defer surface.Free()
-
-	texture, err := renderer.CreateTextureFromSurface(surface)
-	if err != nil {
-		return rightX
-	}
-	defer texture.Destroy()
 
 	// Position text at rightX, vertically centered with line height
-	textX := rightX - surface.W
-	textY := y + (lineHeight-surface.H)/2
-	rect := sdl.Rect{X: textX, Y: textY, W: surface.W, H: surface.H}
+	textX := rightX - w
+	textY := y + (lineHeight-h)/2
+	rect := sdl.Rect{X: textX, Y: textY, W: w, H: h}
 	renderer.Copy(texture, nil, &rect)
 	return textX
 }
