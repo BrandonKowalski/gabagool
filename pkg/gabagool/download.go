@@ -41,6 +41,51 @@ type DownloadManagerOptions struct {
 	AutoContinueOnComplete bool // Exit automatically when all downloads complete without errors
 	MaxConcurrent          int  // Maximum concurrent downloads (default: 3)
 	SkipSSLVerification    bool // Bypass SSL certificate validation (for self-signed certs)
+
+	// Optional label overrides for localisation; empty uses the English default.
+	CloseText                 string // "Close"
+	CancelDownloadText        string // "Cancel Download"
+	CancelAllDownloadsText    string // "Cancel All Downloads"
+	ShowSpeedText             string // "Show Speed"
+	HideSpeedText             string // "Hide Speed"
+	DownloadCompletedText     string // "Download Completed!"
+	AllDownloadsCompletedText string // "All Downloads Completed!"
+	DownloadFailedText        string // "Download Failed!"
+	AllDownloadsFailedText    string // "All Downloads Failed!"
+	DownloadCanceledText      string // "Download Canceled!"
+	AllDownloadsCanceledText  string // "All Downloads Canceled!"
+	AverageSpeedText          string // "Average Speed", rendered as "<text>: 1.23 MB/s"
+}
+
+type downloadLabels struct {
+	close, cancelDownload, cancelAllDownloads, showSpeed, hideSpeed string
+	downloadCompleted, allDownloadsCompleted                        string
+	downloadFailed, allDownloadsFailed                              string
+	downloadCanceled, allDownloadsCanceled                          string
+	averageSpeed                                                    string
+}
+
+func resolveDownloadLabels(opts DownloadManagerOptions) downloadLabels {
+	or := func(override, fallback string) string {
+		if override != "" {
+			return override
+		}
+		return fallback
+	}
+	return downloadLabels{
+		close:                 or(opts.CloseText, "Close"),
+		cancelDownload:        or(opts.CancelDownloadText, "Cancel Download"),
+		cancelAllDownloads:    or(opts.CancelAllDownloadsText, "Cancel All Downloads"),
+		showSpeed:             or(opts.ShowSpeedText, "Show Speed"),
+		hideSpeed:             or(opts.HideSpeedText, "Hide Speed"),
+		downloadCompleted:     or(opts.DownloadCompletedText, "Download Completed!"),
+		allDownloadsCompleted: or(opts.AllDownloadsCompletedText, "All Downloads Completed!"),
+		downloadFailed:        or(opts.DownloadFailedText, "Download Failed!"),
+		allDownloadsFailed:    or(opts.AllDownloadsFailedText, "All Downloads Failed!"),
+		downloadCanceled:      or(opts.DownloadCanceledText, "Download Canceled!"),
+		allDownloadsCanceled:  or(opts.AllDownloadsCanceledText, "All Downloads Canceled!"),
+		averageSpeed:          or(opts.AverageSpeedText, "Average Speed"),
+	}
 }
 
 type downloadJob struct {
@@ -83,6 +128,8 @@ type downloadManager struct {
 	insecureSkipVerify bool
 
 	showSpeed bool
+
+	labels downloadLabels
 }
 
 func newDownloadManager(downloads []Download, headers map[string]string) *downloadManager {
@@ -125,6 +172,7 @@ func DownloadManager(downloads []Download, headers map[string]string, opts Downl
 		downloadManager.maxConcurrent = opts.MaxConcurrent
 	}
 	downloadManager.insecureSkipVerify = opts.SkipSSLVerification
+	downloadManager.labels = resolveDownloadLabels(opts)
 
 	result := DownloadResult{
 		Completed: []Download{},
@@ -469,23 +517,27 @@ func (dm *downloadManager) render(renderer *sdl.Renderer) {
 		var completeColor sdl.Color
 		var completeText string
 
-		var downloadText string
-		if len(dm.downloads) > 1 {
-			downloadText = "All Downloads"
-		} else {
-			downloadText = "Download"
-		}
+		multiple := len(dm.downloads) > 1
 
 		if dm.failedDownloads != nil && len(dm.failedDownloads) > 0 {
 			if dm.errors != nil && len(dm.errors) > 0 && dm.errors[0] != nil && dm.errors[0].Error() != "download cancelled by user" {
-				completeText = fmt.Sprintf("%s Failed!", downloadText)
+				completeText = dm.labels.downloadFailed
+				if multiple {
+					completeText = dm.labels.allDownloadsFailed
+				}
 				completeColor = sdl.Color{R: 255, G: 0, B: 0, A: 255}
 			} else {
-				completeText = fmt.Sprintf("%s Canceled!", downloadText)
+				completeText = dm.labels.downloadCanceled
+				if multiple {
+					completeText = dm.labels.allDownloadsCanceled
+				}
 				completeColor = sdl.Color{R: 255, G: 0, B: 0, A: 255}
 			}
 		} else {
-			completeText = fmt.Sprintf("%s Completed!", downloadText)
+			completeText = dm.labels.downloadCompleted
+			if multiple {
+				completeText = dm.labels.allDownloadsCompleted
+			}
 			completeColor = sdl.Color{R: 100, G: 255, B: 100, A: 255}
 		}
 
@@ -529,7 +581,7 @@ func (dm *downloadManager) render(renderer *sdl.Renderer) {
 			avgSpeed := dm.getAverageSpeed()
 			if avgSpeed > 0 {
 				avgSpeedMBps := avgSpeed / 1048576.0
-				avgSpeedText := fmt.Sprintf("Average Speed: %.2f MB/s", avgSpeedMBps)
+				avgSpeedText := fmt.Sprintf("%s: %.2f MB/s", dm.labels.averageSpeed, avgSpeedMBps)
 				avgSpeedSurface, err := font.RenderUTF8Blended(avgSpeedText, sdl.Color{R: 100, G: 200, B: 255, A: 255})
 				if err == nil && avgSpeedSurface != nil {
 					avgSpeedTexture, err := renderer.CreateTextureFromSurface(avgSpeedSurface)
@@ -576,17 +628,17 @@ func (dm *downloadManager) render(renderer *sdl.Renderer) {
 
 	var footerHelpItems []FooterHelpItem
 	if dm.isAllComplete {
-		footerHelpItems = append(footerHelpItems, FooterHelpItem{ButtonName: "A", HelpText: "Close"})
+		footerHelpItems = append(footerHelpItems, FooterHelpItem{ButtonName: "A", HelpText: dm.labels.close})
 	} else {
-		helpText := "Cancel Download"
+		helpText := dm.labels.cancelDownload
 		if len(dm.downloads) > 1 {
-			helpText = "Cancel All Downloads"
+			helpText = dm.labels.cancelAllDownloads
 		}
 		footerHelpItems = append(footerHelpItems, FooterHelpItem{ButtonName: "Y", HelpText: helpText})
 
-		speedToggleText := "Show Speed"
+		speedToggleText := dm.labels.showSpeed
 		if dm.showSpeed {
-			speedToggleText = "Hide Speed"
+			speedToggleText = dm.labels.hideSpeed
 		}
 		footerHelpItems = append(footerHelpItems, FooterHelpItem{ButtonName: "X", HelpText: speedToggleText})
 	}
