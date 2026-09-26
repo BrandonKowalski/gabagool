@@ -64,7 +64,7 @@ func GetInputProcessor() *Processor {
 	return globalInputProcessor
 }
 
-// InstallInputEventFilter drops unmapped axis-motion events so high-frequency devices (e.g. Steam Deck sticks/IMU) can't flood the SDL queue and starve input. Call after InitInputProcessor.
+// InstallInputEventFilter drops unmapped axis-motion events so they can't flood the SDL queue.
 func InstallInputEventFilter() {
 	sdl.SetEventFilterFunc(func(e sdl.Event, _ interface{}) bool {
 		ip := globalInputProcessor
