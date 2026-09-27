@@ -285,13 +285,42 @@ func (s *detailScreenState) initializeImageDefaults() {
 	}
 }
 
+// detailMargins surround everything on the screen.
+var detailMargins = internal.UniformPadding(20)
+
+// contentWidth is the width sections are drawn in.
+func (s *detailScreenState) contentWidth(margins internal.Padding) int32 {
+	width := s.window.GetWidth() - (margins.Left + margins.Right)
+
+	// Reserve space for scrollbar to prevent text overlap
+	if s.options.ShowScrollbar {
+		scrollbarWidth := int32(10)
+		scrollbarMargin := int32(5)
+		scrollbarPadding := int32(10) // Extra padding between content and scrollbar
+		width -= (scrollbarWidth + scrollbarMargin + scrollbarPadding)
+	}
+	return width
+}
+
 func (s *detailScreenState) loadTextures(title string) {
 	s.titleTexture = renderText(s.renderer, title, internal.Fonts.LargeFont, s.options.TitleColor)
 	s.sectionTitleTextures = make([]*sdl.Texture, len(s.options.Sections))
 
+	titleWidth := s.contentWidth(detailMargins)
+	measure := func(text string) int32 {
+		w, _, err := internal.Fonts.MediumFont.SizeUTF8(text)
+		if err != nil {
+			return 0
+		}
+		return int32(w)
+	}
+
 	for i, section := range s.options.Sections {
 		if section.Title != "" {
-			s.sectionTitleTextures[i] = renderText(s.renderer, section.Title, internal.Fonts.MediumFont, s.options.TitleColor)
+			// A title is one line, so one wider than the screen is cut short
+			// rather than left to run off the edge.
+			sectionTitle := internal.Ellipsize(section.Title, titleWidth, measure)
+			s.sectionTitleTextures[i] = renderText(s.renderer, sectionTitle, internal.Fonts.MediumFont, s.options.TitleColor)
 		}
 
 		if section.Type == SectionTypeInfo {
@@ -687,7 +716,7 @@ func (s *detailScreenState) handleDirectionalRepeats() {
 func (s *detailScreenState) render() {
 	s.clearScreen()
 
-	margins := internal.UniformPadding(20)
+	margins := detailMargins
 	footerHeight := int32(30)
 	safeAreaHeight := s.window.GetHeight() - footerHeight
 
@@ -754,15 +783,7 @@ func (s *detailScreenState) renderTitle(margins internal.Padding, statusBarWidth
 
 func (s *detailScreenState) renderSections(margins internal.Padding, startY int32, safeAreaHeight int32) (int32, int32) {
 	currentY := startY
-	contentWidth := s.window.GetWidth() - (margins.Left + margins.Right)
-
-	// Reserve space for scrollbar to prevent text overlap
-	if s.options.ShowScrollbar {
-		scrollbarWidth := int32(10)
-		scrollbarMargin := int32(5)
-		scrollbarPadding := int32(10) // Extra padding between content and scrollbar
-		contentWidth -= (scrollbarWidth + scrollbarMargin + scrollbarPadding)
-	}
+	contentWidth := s.contentWidth(margins)
 
 	s.activeSlideshow = -1
 	s.visibleDropdownID = ""
@@ -1190,29 +1211,7 @@ func (s *detailScreenState) renderTable(section Section, margins internal.Paddin
 		colWidths[col] += cellPaddingX * 2
 	}
 
-	// Scale columns to fit contentWidth
-	totalNatural := int32(0)
-	for _, w := range colWidths {
-		totalNatural += w
-	}
-	if totalNatural > 0 {
-		if totalNatural > contentWidth {
-			// Scale down proportionally
-			for i := range colWidths {
-				colWidths[i] = int32(float64(colWidths[i]) * float64(contentWidth) / float64(totalNatural))
-				if colWidths[i] < cellPaddingX*2+10 {
-					colWidths[i] = cellPaddingX*2 + 10
-				}
-			}
-		} else if totalNatural < contentWidth {
-			// Distribute remaining space proportionally
-			remaining := contentWidth - totalNatural
-			for i := range colWidths {
-				extra := int32(float64(remaining) * float64(colWidths[i]) / float64(totalNatural))
-				colWidths[i] += extra
-			}
-		}
-	}
+	colWidths = internal.FitColumns(colWidths, contentWidth, cellPaddingX*2+10)
 
 	tableX := margins.Left
 	hasHeaders := len(section.TableHeaders) > 0
