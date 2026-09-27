@@ -158,23 +158,34 @@ func DefaultInputMapping() *InputMapping {
 // h700InputMappingJSON is the default input mapping for h700 devices, whose
 // pad presents as a raw SDL joystick (not a recognized game controller), so the
 // generic DefaultInputMapping does not cover its buttons or d-pad hat.
+//
+// The numbers are the kernel's own for the pad, from 0, as NextUI and MinUI
+// read it and as the Anbernic stock OS reports it: A 0, B 1, Y 2, X 3, L1 4,
+// R1 5, Select 6, Start 7, Menu 8, L2 9, R2 10. They used to be muOS's, which
+// puts its own virtual pad in front with every button moved, so on NextUI B
+// acted as A. The d-pad is mapped both as the hat and as buttons 13 to 16,
+// which NextUI's own code reads it as.
 const h700InputMappingJSON = `{
   "keyboard_map": {},
   "controller_button_map": {},
   "controller_hat_map": {},
   "joystick_axis_map": {},
   "joystick_button_map": {
-    "10": 13,
-    "11": 15,
-    "12": 10,
-    "13": 12,
-    "3": 5,
-    "4": 6,
-    "5": 8,
-    "6": 7,
-    "7": 9,
-    "8": 11,
-    "9": 14
+    "0": 5,
+    "1": 6,
+    "2": 8,
+    "3": 7,
+    "4": 9,
+    "5": 11,
+    "6": 14,
+    "7": 13,
+    "8": 15,
+    "9": 10,
+    "10": 12,
+    "13": 1,
+    "14": 3,
+    "15": 4,
+    "16": 2
   },
   "joystick_hat_map": {
     "1": 1,
