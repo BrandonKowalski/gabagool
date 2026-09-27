@@ -231,21 +231,9 @@ func RenderMultilineTextWithCache(
 				break
 			}
 
-			charsPerLine := int(float32(len(remainingText)) * float32(maxWidth) / float32(width))
-			if charsPerLine <= 0 {
-				charsPerLine = 1
-			}
+			charsPerLine := WrapBreak(remainingText, int32(width), maxWidth)
 
-			if charsPerLine < len(remainingText) {
-				for i := charsPerLine; i > 0; i-- {
-					if i < len(remainingText) && remainingText[i] == ' ' {
-						charsPerLine = i
-						break
-					}
-				}
-			}
-
-			lineText := remainingText[:min(charsPerLine, len(remainingText))]
+			lineText := remainingText[:charsPerLine]
 			cacheKey := "line_" + lineText + "_" + string(color.R) + string(color.G) + string(color.B)
 			lineTexture := cache.Get(cacheKey)
 

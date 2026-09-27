@@ -1490,19 +1490,7 @@ func calculateMultilineTextHeight(text string, font *ttf.Font, maxWidth int32) i
 				break
 			}
 
-			charsPerLine := int(float32(len(remainingText)) * float32(maxWidth) / float32(width))
-			if charsPerLine <= 0 {
-				charsPerLine = 1
-			}
-
-			if charsPerLine < len(remainingText) {
-				for i := charsPerLine; i > 0; i-- {
-					if i < len(remainingText) && remainingText[i] == ' ' {
-						charsPerLine = i
-						break
-					}
-				}
-			}
+			charsPerLine := internal.WrapBreak(remainingText, int32(width), maxWidth)
 
 			totalHeight += int32(fontHeight) + lineSpacing
 			if charsPerLine >= len(remainingText) {
