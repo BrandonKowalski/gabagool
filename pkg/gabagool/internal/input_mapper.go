@@ -158,18 +158,40 @@ func DefaultInputMapping() *InputMapping {
 // h700InputMappingJSON is the default input mapping for h700 devices, whose
 // pad presents as a raw SDL joystick (not a recognized game controller), so the
 // generic DefaultInputMapping does not cover its buttons or d-pad hat.
-//
-// The numbers are the kernel's own for the pad, from 0, as NextUI reads it:
-// B 0, A 1, Y 2, X 3, L1 4, R1 5, Select 6, Start 7, Menu 8, L2 9, R2 10. A
-// and B are the other way round from NextUI's older h700 code, as reported on
-// its prerelease. They used to be muOS's, which puts its own virtual pad in
-// front with every button moved. The d-pad is mapped both as the hat and as buttons 13 to 16,
-// which NextUI's own code reads it as.
 const h700InputMappingJSON = `{
   "keyboard_map": {},
   "controller_button_map": {},
   "controller_hat_map": {},
   "joystick_axis_map": {},
+  "joystick_button_map": {
+    "10": 13,
+    "11": 15,
+    "12": 10,
+    "13": 12,
+    "3": 5,
+    "4": 6,
+    "5": 8,
+    "6": 7,
+    "7": 9,
+    "8": 11,
+    "9": 14
+  },
+  "joystick_hat_map": {
+    "1": 1,
+    "2": 4,
+    "4": 2,
+    "8": 3
+  }
+}`
+
+const nextUIH700InputMappingJSON = `{
+  "keyboard_map": {},
+  "controller_button_map": {},
+  "controller_hat_map": {},
+  "joystick_axis_map": {
+    "2": {"positive_button": 10, "negative_button": 0, "threshold": 8000},
+    "5": {"positive_button": 12, "negative_button": 0, "threshold": 8000}
+  },
   "joystick_button_map": {
     "0": 6,
     "1": 5,
@@ -180,12 +202,8 @@ const h700InputMappingJSON = `{
     "6": 14,
     "7": 13,
     "8": 15,
-    "9": 10,
-    "10": 12,
-    "13": 1,
-    "14": 3,
-    "15": 4,
-    "16": 2
+    "13": 19,
+    "14": 18
   },
   "joystick_hat_map": {
     "1": 1,
@@ -195,14 +213,25 @@ const h700InputMappingJSON = `{
   }
 }`
 
+func isH700Platform() bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM"))), "h700")
+}
+
+func opensAsRawJoystick(name string) bool {
+	return isNextUIMode && isH700Platform() && name == "ANBERNIC-keys"
+}
+
 // platformDefaultInputMapping returns a platform-specific default mapping when
 // the current PLATFORM needs one, otherwise the generic DefaultInputMapping.
 // This is the lowest-precedence source: explicit overrides (embedded bytes or
 // the INPUT_MAPPING_PATH env var) still take priority in GetInputMapping.
 func platformDefaultInputMapping() *InputMapping {
-	platformEnv := strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM")))
-	if strings.Contains(platformEnv, "h700") {
-		if m, err := LoadInputMappingFromBytes([]byte(h700InputMappingJSON)); err == nil {
+	if isH700Platform() {
+		mappingJSON := h700InputMappingJSON
+		if isNextUIMode {
+			mappingJSON = nextUIH700InputMappingJSON
+		}
+		if m, err := LoadInputMappingFromBytes([]byte(mappingJSON)); err == nil {
 			return m
 		}
 		GetInternalLogger().Warn("Failed to load h700 input mapping, using default")

@@ -20,7 +20,7 @@ func InitInputProcessor() {
 	GetInternalLogger().Debug("Detecting controllers", "joystick_count", numJoysticks)
 
 	for i := 0; i < numJoysticks; i++ {
-		if sdl.IsGameController(i) {
+		if sdl.IsGameController(i) && !opensAsRawJoystick(sdl.JoystickNameForIndex(i)) {
 			controller := sdl.GameControllerOpen(i)
 			if controller != nil {
 				name := controller.Name()
@@ -374,7 +374,7 @@ func (ip *Processor) ProcessSDLEvent(event sdl.Event) *Event {
 			// Determine new state
 			if e.Value > axisConfig.Threshold {
 				newState = 1
-			} else if e.Value < -axisConfig.Threshold {
+			} else if e.Value < -axisConfig.Threshold && axisConfig.NegativeButton != constants.VirtualButtonUnassigned {
 				newState = -1
 			}
 
@@ -443,7 +443,7 @@ func (ip *Processor) ProcessSDLEvent(event sdl.Event) *Event {
 			// Determine new state
 			if e.Value > axisConfig.Threshold {
 				newState = 1
-			} else if e.Value < -axisConfig.Threshold {
+			} else if e.Value < -axisConfig.Threshold && axisConfig.NegativeButton != constants.VirtualButtonUnassigned {
 				newState = -1
 			}
 
