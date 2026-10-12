@@ -165,7 +165,6 @@ func createKeyboard(windowWidth, windowHeight int32, helpExitText string, layout
 		helpExitText:     helpExitText,
 		ShowingHelp:      false,
 		InputDelay:       100 * time.Millisecond,
-		lastInputTime:    time.Now(),
 		directionalInput: internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 		StatusBar:        DefaultStatusBarOptions(),
 	}
@@ -206,7 +205,6 @@ func createURLKeyboard(windowWidth, windowHeight int32, helpExitText string, sho
 		helpExitText:     helpExitText,
 		ShowingHelp:      false,
 		InputDelay:       100 * time.Millisecond,
-		lastInputTime:    time.Now(),
 		directionalInput: internal.NewDirectionalInputWithTiming(150*time.Millisecond, 50*time.Millisecond),
 		urlShortcuts:     shortcuts,
 		StatusBar:        DefaultStatusBarOptions(),

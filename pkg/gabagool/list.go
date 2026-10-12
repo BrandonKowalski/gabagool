@@ -129,7 +129,6 @@ func newListController(options ListOptions) *listController {
 		SelectedItems:    selectedItems,
 		MultiSelect:      options.InitialMultiSelectMode,
 		StartY:           20,
-		lastInputTime:    time.Now(),
 		helpOverlay:      helpOverlay,
 		itemScrollData:   make(map[int]*internal.TextScrollData),
 		titleScrollData:  &internal.TextScrollData{},

@@ -84,7 +84,7 @@ func ConfirmationMessage(message string, footerHelpItems []FooterHelpItem, optio
 	settings.StatusBar = options.StatusBar
 
 	result := ConfirmationResult{Confirmed: false}
-	lastInputTime := time.Now()
+	var lastInputTime time.Time
 
 	imageTexture, imageRect := loadAndPrepareImage(renderer, settings)
 	defer func() {

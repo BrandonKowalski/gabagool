@@ -81,7 +81,6 @@ func SelectionMessage(message string, options []SelectionOption, footerHelpItems
 		footerHelpItems: footerHelpItems,
 		statusBar:       settings.StatusBar,
 		inputDelay:      constants.DefaultInputDelay,
-		lastInputTime:   time.Now(),
 	}
 
 	if controller.confirmButton == constants.VirtualButtonUnassigned {

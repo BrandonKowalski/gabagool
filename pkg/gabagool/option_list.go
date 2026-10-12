@@ -240,7 +240,6 @@ func newOptionsListController(title string, items []ItemWithOptions) *optionsLis
 		SelectedIndex:         selectedIndex,
 		Settings:              defaultOptionsListSettings(title),
 		StartY:                20,
-		lastInputTime:         time.Now(),
 		itemScrollData:        make(map[int]*internal.TextScrollData),
 		optionValueScrollData: make(map[int]*internal.TextScrollData),
 		showingColorPicker:    false,

@@ -157,7 +157,6 @@ func newDownloadManager(downloads []Download, headers map[string]string) *downlo
 		progressBarHeight:  progressBarHeight,
 		progressBarX:       progressBarX,
 		scrollOffset:       0,
-		lastInputTime:      time.Now(),
 		inputDelay:         constants.DefaultInputDelay,
 		showSpeed:          false,
 	}

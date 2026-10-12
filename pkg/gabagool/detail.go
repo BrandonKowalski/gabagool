@@ -255,7 +255,6 @@ func initializeDetailScreenState(title string, options DetailScreenOptions, foot
 		options:               options,
 		footerHelpItems:       footerHelpItems,
 		scrollAnimationSpeed:  0.15,
-		lastInputTime:         time.Now(),
 		inputDelay:            constants.DefaultInputDelay,
 		slideshowStates:       make(map[int]slideshowState),
 		dropdownStates:        make(map[string]*dropdownState),
