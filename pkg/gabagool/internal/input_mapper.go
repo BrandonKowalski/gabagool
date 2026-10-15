@@ -217,6 +217,12 @@ func isH700Platform() bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM"))), "h700")
 }
 
+// The my355 pad reports every press twice: as a gamepad button from
+// miyoo_inputd and as a key from gpio-keys-polled.
+func isMy355Platform() bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM"))), "my355")
+}
+
 func opensAsRawJoystick(name string) bool {
 	return isNextUIMode && isH700Platform() && name == "ANBERNIC-keys"
 }

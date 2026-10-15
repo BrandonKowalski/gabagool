@@ -107,10 +107,11 @@ func isEnvDisabled(envVar string) bool {
 	return v == "1" || v == "true"
 }
 
-// isKeyboardDisabled returns true when keyboard events should be suppressed,
-// either via the programmatic setting or the DISABLE_KEYBOARD_INPUT env var.
-func (ip *Processor) isKeyboardDisabled() bool {
-	return ip.disabledSources.Keyboard || isEnvDisabled(constants.DisableKeyboardInputEnvVar)
+// IsKeyboardDisabled returns true when keyboard events should be suppressed,
+// either via the programmatic setting, the DISABLE_KEYBOARD_INPUT env var, or
+// on my355 where the keys duplicate the gamepad.
+func (ip *Processor) IsKeyboardDisabled() bool {
+	return ip.disabledSources.Keyboard || isEnvDisabled(constants.DisableKeyboardInputEnvVar) || isMy355Platform()
 }
 
 // isControllerDisabled returns true when controller events should be suppressed,
@@ -269,7 +270,7 @@ func (ip *Processor) ProcessSDLEvent(event sdl.Event) *Event {
 
 	switch e := event.(type) {
 	case *sdl.KeyboardEvent:
-		if ip.isKeyboardDisabled() {
+		if ip.IsKeyboardDisabled() {
 			return nil
 		}
 		keyCode := e.Keysym.Sym

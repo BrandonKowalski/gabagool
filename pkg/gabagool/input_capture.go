@@ -252,7 +252,7 @@ func (il *inputCaptureController) handleInstructionEvent(event sdl.Event) {
 	pressed := false
 	switch e := event.(type) {
 	case *sdl.KeyboardEvent:
-		pressed = e.State == sdl.PRESSED
+		pressed = e.State == sdl.PRESSED && !internal.GetInputProcessor().IsKeyboardDisabled()
 	case *sdl.JoyButtonEvent:
 		pressed = e.State == sdl.PRESSED
 	case *sdl.ControllerButtonEvent:
@@ -270,7 +270,7 @@ func (il *inputCaptureController) handleInstructionEvent(event sdl.Event) {
 func (il *inputCaptureController) handlePromptingEvent(event sdl.Event) {
 	switch e := event.(type) {
 	case *sdl.KeyboardEvent:
-		if e.State == sdl.PRESSED {
+		if e.State == sdl.PRESSED && !internal.GetInputProcessor().IsKeyboardDisabled() {
 			il.startHold(
 				mappedInput{code: int(e.Keysym.Sym), source: internal.SourceKeyboard},
 				fmt.Sprintf("Keyboard: %d", int(e.Keysym.Sym)),
