@@ -763,7 +763,7 @@ func (lc *listController) renderContent(window *internal.Window, visibleItems []
 		footerItems = lc.filterConfirmButton(lc.Options.FooterHelpItems)
 	}
 
-	renderFooter(renderer, internal.Fonts.SmallFont, footerItems, lc.Options.Margins.Bottom, true, centerSingleItem)
+	renderFooter(renderer, internal.Fonts.SmallFont, footerItems, lc.Options.Margins.Bottom, nil, centerSingleItem)
 }
 
 func (lc *listController) imageIsDisplayed() bool {

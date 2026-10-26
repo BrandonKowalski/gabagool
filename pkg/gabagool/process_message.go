@@ -260,7 +260,7 @@ func (p *processMessage) render(renderer *sdl.Renderer) {
 	}
 
 	if len(p.footerHelpItems) > 0 {
-		renderFooter(renderer, internal.Fonts.SmallFont, p.footerHelpItems, 30, true, len(p.footerHelpItems) == 1)
+		renderFooter(renderer, internal.Fonts.SmallFont, p.footerHelpItems, 30, nil, len(p.footerHelpItems) == 1)
 	}
 }
 

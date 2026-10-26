@@ -222,7 +222,7 @@ func renderFrame(renderer *sdl.Renderer, window *internal.Window, settings confi
 		internal.Fonts.SmallFont,
 		settings.FooterHelpItems,
 		settings.Margins.Bottom,
-		false,
+		&settings.BackgroundColor,
 		true,
 	)
 

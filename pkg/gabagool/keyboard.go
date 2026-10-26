@@ -1402,7 +1402,7 @@ func (kb *virtualKeyboard) renderFooter(renderer *sdl.Renderer) {
 			{ButtonName: "Menu", HelpText: "Help"},
 		},
 		20,
-		true,
+		nil,
 		true,
 	)
 }

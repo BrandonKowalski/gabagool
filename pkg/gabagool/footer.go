@@ -44,7 +44,7 @@ func renderFooter(
 	font *ttf.Font,
 	footerHelpItems []FooterHelpItem,
 	bottomPadding int32,
-	transparentBackground bool,
+	background *sdl.Color,
 	centerSingleItem bool,
 ) {
 	if len(footerHelpItems) == 0 {
@@ -71,8 +71,9 @@ func renderFooter(
 	y := windowHeight - bottomPadding - int32(float32(50)*scaleFactor)
 	outerPillHeight := int32(float32(60) * scaleFactor)
 
-	if !transparentBackground {
-		// Add a black background for the entire footer area
+	if background != nil {
+		// Mask the footer area in the screen's own background, so content
+		// scrolled behind the pills is hidden without a band of another colour
 		footerBackgroundRect := &sdl.Rect{
 			X: 0,                                                // Start from left edge
 			Y: y - 10,                                           // Same Y as the pills
@@ -80,7 +81,7 @@ func renderFooter(
 			H: outerPillHeight + int32(float32(50)*scaleFactor), // Same height as the pills
 		}
 
-		renderer.SetDrawColor(0, 0, 0, 255)
+		renderer.SetDrawColor(background.R, background.G, background.B, 255)
 		renderer.FillRect(footerBackgroundRect)
 	}
 

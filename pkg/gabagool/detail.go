@@ -1391,7 +1391,7 @@ func (s *detailScreenState) renderFooter(margins internal.Padding) {
 			internal.Fonts.SmallFont,
 			s.footerHelpItems,
 			margins.Bottom,
-			false,
+			&s.options.BackgroundColor,
 			true,
 		)
 	}

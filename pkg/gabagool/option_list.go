@@ -1208,7 +1208,7 @@ func (olc *optionsListController) render(renderer *sdl.Renderer) {
 		internal.Fonts.SmallFont,
 		olc.Settings.FooterHelpItems,
 		olc.Settings.Margins.Bottom,
-		true,
+		nil,
 		true,
 	)
 }

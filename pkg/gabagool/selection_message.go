@@ -246,7 +246,7 @@ func (c *selectionMessageController) render(renderer *sdl.Renderer, window *inte
 		internal.Fonts.SmallFont,
 		c.footerHelpItems,
 		20,
-		false,
+		&sdl.Color{R: 0, G: 0, B: 0, A: 255}, // the screen clears to black
 		true,
 	)
 
