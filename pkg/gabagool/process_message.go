@@ -24,6 +24,7 @@ type ProcessMessageOptions struct {
 	ImageWidth          int32  // Desired width for rendering (required for SVG, optional for raster images)
 	ImageHeight         int32  // Desired height for rendering (required for SVG, optional for raster images)
 	ShowThemeBackground bool
+	BackgroundColor     sdl.Color // Screen background when no theme background is drawn; black when unset
 	ShowProgressBar     bool
 	Progress            *atomic.Float64
 	ProcessInput        bool                    // If true, process input events (enables chord/sequence detection)
@@ -34,6 +35,7 @@ type ProcessMessageOptions struct {
 type processMessage struct {
 	window          *internal.Window
 	showBG          bool
+	backgroundColor sdl.Color
 	message         string
 	isProcessing    bool
 	completeTime    time.Time
@@ -54,6 +56,7 @@ func ProcessMessage[T any](message string, options ProcessMessageOptions, fn fun
 	processor := &processMessage{
 		window:          internal.GetWindow(),
 		showBG:          options.ShowThemeBackground,
+		backgroundColor: options.BackgroundColor,
 		imageWidth:      options.ImageWidth,
 		imageHeight:     options.ImageHeight,
 		message:         message,
@@ -211,7 +214,8 @@ func (p *processMessage) render(renderer *sdl.Renderer) {
 	if p.showBG && internal.GetWindow().Background != nil {
 		internal.GetWindow().RenderBackground()
 	} else {
-		renderer.SetDrawColor(0, 0, 0, 255)
+		bg := p.backgroundColor
+		renderer.SetDrawColor(bg.R, bg.G, bg.B, 255)
 		renderer.Clear()
 	}
 
