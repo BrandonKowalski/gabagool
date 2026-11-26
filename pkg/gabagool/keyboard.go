@@ -84,6 +84,12 @@ type virtualKeyboard struct {
 	StatusBar        StatusBarOptions
 
 	directionalInput internal.DirectionalInput
+
+	// navAnchorX is the horizontal position up/down moves aim for. It survives
+	// consecutive vertical moves, so passing through a wide key such as space
+	// returns to the column the user came from.
+	navAnchorX   int32
+	navAnchorSet bool
 }
 
 var defaultKeyboardHelpLines = []string{
@@ -432,132 +438,27 @@ func createNumericKeys() []key {
 }
 
 func setupKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
-	dims := internal.CalculateKeyboardDimensions(windowWidth, windowHeight)
-	kb.KeyboardRect = dims.KeyboardRect()
-	kb.TextInputRect = dims.TextInputRect()
+	grid := newKeyGrid(kb, windowWidth, windowHeight, 6)
 
-	sizes := internal.CalculateKeySizes(dims, 6)
-	keyWidth := sizes.KeyWidth
-	keyHeight := sizes.KeyHeight
-	keySpacing := sizes.KeySpacing
+	grid.keys(0, 0, 0, 10, 1)
+	kb.BackspaceRect = grid.cell(0, 10, 2)
 
-	// Calculate row widths for centering
-	row1Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, sizes.BackspaceWidth)
-	row2Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
-	row3Width := internal.CalculateRowWidth(9, keyWidth, keySpacing, 0, sizes.EnterWidth)
-	row4Width := internal.CalculateRowWidth(7, keyWidth, keySpacing, sizes.ShiftWidth, sizes.SymbolWidth)
-	row5Width := sizes.SpaceWidth
+	grid.keys(1, 0, 10, 10, 1)
+	layoutLetterTail(kb, grid, 2, 20)
 
-	maxRowWidth := internal.MaxRowWidth(row1Width, row2Width, row3Width, row4Width, row5Width)
-	leftMargin := dims.StartX + (dims.KeyboardWidth-maxRowWidth)/2
-	y := dims.KeyboardStartY + keySpacing
-
-	// Row 1: Numbers + Backspace
-	x := leftMargin
-	for i := 0; i < 10; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: sizes.BackspaceWidth, H: keyHeight}
-
-	// Row 2: QWERTY
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row2Width)/2
-	for i := 10; i < 20; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-
-	// Row 3: ASDF + Enter
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row3Width)/2
-	for i := 20; i < 29; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-	kb.EnterRect = sdl.Rect{X: x, Y: y, W: sizes.EnterWidth, H: keyHeight}
-
-	// Row 4: Shift + ZXCV + Symbol
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row4Width)/2
-	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: sizes.ShiftWidth, H: keyHeight}
-	x += sizes.ShiftWidth + keySpacing
-	for i := 29; i < 36; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: sizes.SymbolWidth, H: keyHeight}
-
-	// Row 5: Space
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row5Width)/2
-	kb.SpaceRect = sdl.Rect{X: x, Y: y, W: sizes.SpaceWidth, H: keyHeight}
+	kb.SpaceRect = grid.cell(4, 0, internal.KeyboardGridColumns)
 }
 
 func setupURLKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
-	dims := internal.CalculateKeyboardDimensions(windowWidth, windowHeight)
-	kb.KeyboardRect = dims.KeyboardRect()
-	kb.TextInputRect = dims.TextInputRect()
+	grid := newKeyGrid(kb, windowWidth, windowHeight, 6)
 
-	sizes := internal.CalculateKeySizes(dims, 6)
-	keyWidth := sizes.KeyWidth
-	keyHeight := sizes.KeyHeight
-	keySpacing := sizes.KeySpacing
+	// Shortcuts are two columns wide, so five of them sit over the ten keys below.
+	grid.keys(0, 0, 0, 5, 2)
+	kb.BackspaceRect = grid.cell(0, 10, 2)
 
-	// Calculate row widths
-	row1Width := internal.CalculateRowWidth(5, sizes.ShortcutWidth, keySpacing, 0, sizes.BackspaceWidth)
-	row2Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
-	row3Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
-	row4Width := internal.CalculateRowWidth(9, keyWidth, keySpacing, 0, sizes.EnterWidth)
-	row5Width := internal.CalculateRowWidth(7, keyWidth, keySpacing, sizes.ShiftWidth, sizes.SymbolWidth)
-
-	maxRowWidth := internal.MaxRowWidth(row1Width, row2Width, row3Width, row4Width, row5Width)
-	leftMargin := dims.StartX + (dims.KeyboardWidth-maxRowWidth)/2
-	y := dims.KeyboardStartY + keySpacing
-
-	// Row 1: URL shortcuts + Backspace
-	x := leftMargin + (maxRowWidth-row1Width)/2
-	for i := 0; i < 5; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: sizes.ShortcutWidth, H: keyHeight}
-		x += sizes.ShortcutWidth + keySpacing
-	}
-	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: sizes.BackspaceWidth, H: keyHeight}
-
-	// Row 2: URL special characters
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row2Width)/2
-	for i := 5; i < 15; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-
-	// Row 3: QWERTY row
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row3Width)/2
-	for i := 15; i < 25; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-
-	// Row 4: ASDF row + Enter
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row4Width)/2
-	for i := 25; i < 34; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-	kb.EnterRect = sdl.Rect{X: x, Y: y, W: sizes.EnterWidth, H: keyHeight}
-
-	// Row 5: Shift + ZXCV row + Symbol
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row5Width)/2
-	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: sizes.ShiftWidth, H: keyHeight}
-	x += sizes.ShiftWidth + keySpacing
-	for i := 34; i < 41; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: sizes.SymbolWidth, H: keyHeight}
+	grid.keys(1, 0, 5, 10, 1)
+	grid.keys(2, 0, 15, 10, 1)
+	layoutLetterTail(kb, grid, 3, 25)
 
 	kb.SpaceRect = sdl.Rect{} // No space key for URL layout
 }
@@ -568,80 +469,54 @@ func setupURLKeyboardRectsFor5(kb *virtualKeyboard, windowWidth, windowHeight in
 }
 
 func setupURLKeyboardRectsFor10(kb *virtualKeyboard, windowWidth, windowHeight int32) {
+	grid := newKeyGrid(kb, windowWidth, windowHeight, 7) // 6 rows + padding
+
+	grid.keys(0, 0, 0, 5, 2)
+	kb.BackspaceRect = grid.cell(0, 10, 2)
+
+	grid.keys(1, 0, 5, 5, 2)
+	grid.keys(2, 0, 10, 10, 1)
+	grid.keys(3, 0, 20, 10, 1)
+	layoutLetterTail(kb, grid, 4, 30)
+
+	kb.SpaceRect = sdl.Rect{} // No space key for URL layout
+}
+
+// layoutLetterTail places the ASDF row (with enter) and the ZXCV row (with
+// shift and symbol), starting at the given row and key index. Shift is one
+// column wide so that Z sits directly below S.
+func layoutLetterTail(kb *virtualKeyboard, grid keyGrid, row, firstKey int) {
+	grid.keys(row, 0, firstKey, 9, 1)
+	kb.EnterRect = grid.cell(row, 9, 3)
+
+	kb.ShiftRect = grid.cell(row+1, 0, 1)
+	grid.keys(row+1, 1, firstKey+9, 7, 1)
+	kb.SymbolRect = grid.cell(row+1, 8, 4)
+}
+
+// keyGrid places keys on a fixed column grid so that rows line up vertically.
+type keyGrid struct {
+	kb    *virtualKeyboard
+	dims  internal.KeyboardDimensions
+	sizes internal.KeySizes
+}
+
+func newKeyGrid(kb *virtualKeyboard, windowWidth, windowHeight int32, numRows int) keyGrid {
 	dims := internal.CalculateKeyboardDimensions(windowWidth, windowHeight)
 	kb.KeyboardRect = dims.KeyboardRect()
 	kb.TextInputRect = dims.TextInputRect()
+	return keyGrid{kb: kb, dims: dims, sizes: internal.CalculateKeySizes(dims, numRows)}
+}
 
-	sizes := internal.CalculateKeySizes(dims, 7) // 6 rows + padding
-	keyWidth := sizes.KeyWidth
-	keyHeight := sizes.KeyHeight
-	keySpacing := sizes.KeySpacing
+func (g keyGrid) cell(row, col, span int) sdl.Rect {
+	return internal.GridCell(g.dims, g.sizes, row, col, span)
+}
 
-	// Calculate row widths
-	row1Width := internal.CalculateRowWidth(5, sizes.ShortcutWidth, keySpacing, 0, sizes.BackspaceWidth)
-	row2Width := internal.CalculateRowWidth(5, sizes.ShortcutWidth, keySpacing, 0, 0)
-	row3Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
-	row4Width := internal.CalculateRowWidth(10, keyWidth, keySpacing, 0, 0)
-	row5Width := internal.CalculateRowWidth(9, keyWidth, keySpacing, 0, sizes.EnterWidth)
-	row6Width := internal.CalculateRowWidth(7, keyWidth, keySpacing, sizes.ShiftWidth, sizes.SymbolWidth)
-
-	maxRowWidth := internal.MaxRowWidth(row1Width, row2Width, row3Width, row4Width, row5Width, row6Width)
-	leftMargin := dims.StartX + (dims.KeyboardWidth-maxRowWidth)/2
-	y := dims.KeyboardStartY + keySpacing
-
-	// Row 1: URL shortcuts (0-4) + Backspace
-	x := leftMargin + (maxRowWidth-row1Width)/2
-	for i := 0; i < 5; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: sizes.ShortcutWidth, H: keyHeight}
-		x += sizes.ShortcutWidth + keySpacing
+// keys places count consecutive keys along a row, each span columns wide.
+func (g keyGrid) keys(row, col, firstKey, count, span int) {
+	for i := 0; i < count; i++ {
+		g.kb.Keys[firstKey+i].Rect = g.cell(row, col+i*span, span)
 	}
-	kb.BackspaceRect = sdl.Rect{X: x, Y: y, W: sizes.BackspaceWidth, H: keyHeight}
-
-	// Row 2: URL shortcuts (5-9)
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row2Width)/2
-	for i := 5; i < 10; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: sizes.ShortcutWidth, H: keyHeight}
-		x += sizes.ShortcutWidth + keySpacing
-	}
-
-	// Row 3: URL special characters (10-19)
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row3Width)/2
-	for i := 10; i < 20; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-
-	// Row 4: QWERTY row (20-29)
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row4Width)/2
-	for i := 20; i < 30; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-
-	// Row 5: ASDF row (30-38) + Enter
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row5Width)/2
-	for i := 30; i < 39; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-	kb.EnterRect = sdl.Rect{X: x, Y: y, W: sizes.EnterWidth, H: keyHeight}
-
-	// Row 6: Shift + ZXCV row (39-45) + Symbol
-	y += keyHeight + keySpacing
-	x = leftMargin + (maxRowWidth-row6Width)/2
-	kb.ShiftRect = sdl.Rect{X: x, Y: y, W: sizes.ShiftWidth, H: keyHeight}
-	x += sizes.ShiftWidth + keySpacing
-	for i := 39; i < 46; i++ {
-		kb.Keys[i].Rect = sdl.Rect{X: x, Y: y, W: keyWidth, H: keyHeight}
-		x += keyWidth + keySpacing
-	}
-	kb.SymbolRect = sdl.Rect{X: x, Y: y, W: sizes.SymbolWidth, H: keyHeight}
-
-	kb.SpaceRect = sdl.Rect{} // No space key for URL layout
 }
 
 func setupNumericKeyboardRects(kb *virtualKeyboard, windowWidth, windowHeight int32) {
@@ -923,8 +798,10 @@ func (kb *virtualKeyboard) navigate(button constants.VirtualButton) {
 	case constants.VirtualButtonDown:
 		newRow, newCol = kb.moveDown(layout, currentRow, currentCol)
 	case constants.VirtualButtonLeft:
+		kb.navAnchorSet = false
 		newRow, newCol = kb.moveLeft(layout, currentRow, currentCol)
 	case constants.VirtualButtonRight:
+		kb.navAnchorSet = false
 		newRow, newCol = kb.moveRight(layout, currentRow, currentCol)
 	}
 
@@ -957,25 +834,56 @@ func (kb *virtualKeyboard) findCurrentPosition(layout *keyLayout) (int, int) {
 }
 
 func (kb *virtualKeyboard) moveUp(layout *keyLayout, row, col int) (int, int) {
-	newRow := row - 1
-	if newRow < 0 {
-		newRow = len(layout.rows) - 1
-	}
-	if col >= len(layout.rows[newRow]) {
-		col = len(layout.rows[newRow]) - 1
-	}
-	return newRow, col
+	newRow := (row - 1 + len(layout.rows)) % len(layout.rows)
+	return newRow, kb.columnBelowAnchor(layout, row, col, newRow)
 }
 
 func (kb *virtualKeyboard) moveDown(layout *keyLayout, row, col int) (int, int) {
-	newRow := row + 1
-	if newRow >= len(layout.rows) {
-		newRow = 0
+	newRow := (row + 1) % len(layout.rows)
+	return newRow, kb.columnBelowAnchor(layout, row, col, newRow)
+}
+
+// columnBelowAnchor returns the column in newRow whose key is drawn closest to
+// the anchor, which is the center of the key the vertical movement started on.
+func (kb *virtualKeyboard) columnBelowAnchor(layout *keyLayout, row, col, newRow int) int {
+	if !kb.navAnchorSet {
+		rect := kb.keyRect(layout.rows[row][col])
+		kb.navAnchorX = rect.X + rect.W/2
+		kb.navAnchorSet = true
 	}
-	if col >= len(layout.rows[newRow]) {
-		col = len(layout.rows[newRow]) - 1
+
+	best := 0
+	bestDistance := int32(-1)
+	for c, k := range layout.rows[newRow] {
+		rect := kb.keyRect(k)
+		distance := max(rect.X-kb.navAnchorX, kb.navAnchorX-(rect.X+rect.W), 0)
+		if bestDistance < 0 || distance < bestDistance {
+			best, bestDistance = c, distance
+		}
 	}
-	return newRow, col
+	return best
+}
+
+// keyRect returns where a layout entry is drawn.
+func (kb *virtualKeyboard) keyRect(entry interface{}) sdl.Rect {
+	switch k := entry.(type) {
+	case int:
+		return kb.Keys[k].Rect
+	case string:
+		switch k {
+		case "backspace":
+			return kb.BackspaceRect
+		case "enter":
+			return kb.EnterRect
+		case "space":
+			return kb.SpaceRect
+		case "shift":
+			return kb.ShiftRect
+		case "symbol":
+			return kb.SymbolRect
+		}
+	}
+	return sdl.Rect{}
 }
 
 func (kb *virtualKeyboard) moveLeft(layout *keyLayout, row, col int) (int, int) {

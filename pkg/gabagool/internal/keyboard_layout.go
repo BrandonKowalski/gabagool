@@ -54,11 +54,7 @@ type KeySizes struct {
 	KeyHeight      int32
 	KeySpacing     int32
 	BackspaceWidth int32
-	ShiftWidth     int32
-	SymbolWidth    int32
 	EnterWidth     int32
-	SpaceWidth     int32
-	ShortcutWidth  int32
 }
 
 // CalculateKeySizes computes key sizes for QWERTY-style layouts.
@@ -73,11 +69,7 @@ func CalculateKeySizes(dims KeyboardDimensions, numRows int) KeySizes {
 		KeyHeight:      keyHeight,
 		KeySpacing:     keySpacing,
 		BackspaceWidth: keyWidth * 2,
-		ShiftWidth:     keyWidth * 2,
-		SymbolWidth:    keyWidth * 2,
 		EnterWidth:     keyWidth + keyWidth/2,
-		SpaceWidth:     keyWidth * 8,
-		ShortcutWidth:  keyWidth * 2,
 	}
 }
 
@@ -108,29 +100,6 @@ type RowSpec struct {
 	RightKey string
 }
 
-// MaxRowWidth finds the maximum width among a slice of row widths.
-func MaxRowWidth(widths ...int32) int32 {
-	max := widths[0]
-	for _, w := range widths[1:] {
-		if w > max {
-			max = w
-		}
-	}
-	return max
-}
-
-// CalculateRowWidth computes the width of a row given its components.
-func CalculateRowWidth(numKeys int, keyWidth, keySpacing int32, leftWidth, rightWidth int32) int32 {
-	width := int32(numKeys)*keyWidth + int32(numKeys-1)*keySpacing
-	if leftWidth > 0 {
-		width += leftWidth + keySpacing
-	}
-	if rightWidth > 0 {
-		width += rightWidth + keySpacing
-	}
-	return width
-}
-
 // LayoutRow positions keys for a single row.
 // Returns the next Y position after this row.
 func LayoutRow(
@@ -146,4 +115,21 @@ func LayoutRow(
 		x += keyWidth + keySpacing
 	}
 	return x
+}
+
+// KeyboardGridColumns is the number of columns in QWERTY-style layouts.
+const KeyboardGridColumns = 12
+
+// GridCell returns the rectangle of a key on the QWERTY column grid, spanning
+// the given number of columns.
+func GridCell(dims KeyboardDimensions, sizes KeySizes, row, col, span int) sdl.Rect {
+	pitchX := sizes.KeyWidth + sizes.KeySpacing
+	pitchY := sizes.KeyHeight + sizes.KeySpacing
+	gridWidth := KeyboardGridColumns*pitchX - sizes.KeySpacing
+	return sdl.Rect{
+		X: dims.StartX + (dims.KeyboardWidth-gridWidth)/2 + int32(col)*pitchX,
+		Y: dims.KeyboardStartY + sizes.KeySpacing + int32(row)*pitchY,
+		W: int32(span)*pitchX - sizes.KeySpacing,
+		H: sizes.KeyHeight,
+	}
 }
